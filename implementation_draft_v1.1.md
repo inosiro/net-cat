@@ -183,7 +183,6 @@ Properties:
 *   Only this goroutine writes to history.
 *   Ordered delivery to all clients.
 
-- 
 **Better approach**: `go s.DisconnectClient(c)`
 Have broadcaster track failed sends and mark clients for cleanup, letting the reader/close mechanism handle it exclusively
 
