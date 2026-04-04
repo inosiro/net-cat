@@ -1,9 +1,3 @@
-Yes, you can certainly maintain this formatting for a Git repository. To ensure it displays "beautifully" on platforms like GitHub or GitLab, you should save the content as a `.md` file.
-
-Below is the formatted content ready for a Markdown viewer. You can copy this block into a file named `README.md` or `Netcat_Thesis.md`.
-
----
-
 # Netcat: Architecture and Real-Time Communication
 **A Comprehensive Professional Thesis**
 
