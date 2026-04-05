@@ -1,0 +1,127 @@
+Timestamp: 2026-04-05
+User Request: "keep this * All agents must read [project-context.md](ai/project-context.md) BEFORE making ANY changes. ..."
+
+AI Assistant Output & Actions:
+
+Documentation Update:
+- Restored the "CRITICAL: Read PROJECT_CONTEXT.md First" section to `.instructions.md`.
+- Retained the logging rules and project context for `net-cat`.
+- Adjusted logging rules to append to `ai/changes_log.txt` instead of `docs/logs/ai.log` based on the restored configuration.
+
+Log Update: Appended this action to `changes_log.txt`.
+
+Timestamp: 2026-04-05
+User Request: "can you read @[implementation_draft_v1.1.md] and divide it into tasks following a test driven development?"
+
+AI Assistant Output & Actions:
+
+Planning & Task Definitions:
+- Read `/home/panokatos/net-cat/implementation_draft_v1.1.md` to understand the net-cat architecture.
+- Divided the system into four independent TDD phases (Core Utilities, State Logic, Broadcaster, Network Layer).
+- Generated a formal `implementation_plan.md` for these TDD tasks.
+
+Log Update: Appended this action to `changes_log.txt`.
+
+Timestamp: 2026-04-05
+User Request: "i want you to create files for each seperate task in docs/tasks"
+
+AI Assistant Output & Actions:
+
+Documentation Update:
+- Created 12 individual `.md` Markdown files in `docs/tasks/` representing each TDD task.
+- Structured each file with a clear "Description" and actionable "Acceptance Criteria" to guide execution systematically.
+
+Log Update: Appended this action to `changes_log.txt`.
+
+Timestamp: 2026-04-05
+User Request: "move folder ai in docs"
+
+AI Assistant Output & Actions:
+
+Git Workflow & File Move:
+- Moved the `ai` directory to `docs/ai` using `mv`.
+- Updated `.instructions.md` with the new paths for `project-context.md` and `changes_log.txt`.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-05
+User Request: "lets start building each task with tdd one by one"
+
+AI Assistant Output & Actions:
+
+Feature Implementation:
+- Initialized Go module (`go mod init netcat`).
+- Executed strict TDD cycle for `docs/tasks/task_1_1_chat_message.md`.
+- Wrote failing test in `internal/chat/message_test.go` checking specific timestamp and text layouts.
+- Wrote logic in `internal/chat/message.go` to make it pass.
+- Used `go test ./internal/chat/...` -> PASS.
+
+Documentation Update:
+- Checked off completion criteria in `docs/tasks/task_1_1_chat_message.md`.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-05
+User Request: "lets start building each task with tdd one by one (Task 1.2)"
+
+AI Assistant Output & Actions:
+
+Feature Implementation:
+- Continued strict TDD run for `docs/tasks/task_1_2_user_validation.md`.
+- Wrote failing test block in `internal/chat/utils_test.go` rejecting spaces, controls, long strings, or empty strings.
+- Implemented `ValidateUsername` in `internal/chat/utils.go`.
+- Ensured tests pass with `go test ./internal/chat/...`.
+
+Documentation Update:
+- Checked off completion criteria in `docs/tasks/task_1_2_user_validation.md`.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-05
+User Request: "not yet , since i have created a branch what i should do to push every change we have ?"
+
+AI Assistant Output & Actions:
+
+Git Workflow:
+- Ran `git status` to identify modifications on branch `test-branch`.
+- Provided the user with the git commands to stage, commit, and push their changes to their remote branch.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-05
+User Request: "lets start building each task with tdd one by one (Task 1.3)"
+
+AI Assistant Output & Actions:
+
+Feature Implementation:
+- Continued strict TDD run for `docs/tasks/task_1_3_safe_closure.md`.
+- Wrote testing for concurrent closures `TestSafeClose` in `internal/chat/client_test.go` checking thread safety against race conditions.
+- Implemented `Client` struct and `SafeClose` atomic locking in `internal/chat/client.go`.
+- Ran tests with race detection `go test -race ./internal/chat/...` -> PASS.
+
+Documentation Update:
+- Checked off completion criteria in `docs/tasks/task_1_3_safe_closure.md`.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-05
+User Request: "so this will merge the branch with the main?"
+
+AI Assistant Output & Actions:
+
+Git Workflow & Education:
+- Clarified that `git push` only uploads the branch to the remote repository.
+- Explained that merging to `main` is a separate process (via Pull Request or `git merge`).
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-05
+User Request: "how to do a pull request ?"
+
+AI Assistant Output & Actions:
+
+Git Workflow & Education:
+- Explained step-by-step how to create a Pull Request on platforms like GitHub or GitLab.
+- Steps include pushing the branch, navigating to the repository URL, and clicking the 'Compare & pull request' button.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
