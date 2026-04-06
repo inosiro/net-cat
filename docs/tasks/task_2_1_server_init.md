@@ -4,7 +4,7 @@
 Initialize the `Server` state including maps, mutexes, and channels.
 
 ## Acceptance Criteria
-- [ ] Struct `Server` is defined.
-- [ ] `NewServer()` correctly initializes `clients` map.
-- [ ] `NewServer()` initializes the `messages` buffered channel.
-- [ ] Test server instances don't cause panics when locks are acquired.
+- [x] Struct `Server` is defined.
+- [x] `NewServer()` correctly initializes `clients` map.
+- [x] `NewServer()` initializes the `messages` buffered channel.
+- [x] Test server instances don't cause panics when locks are acquired.
