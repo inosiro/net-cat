@@ -1,0 +1,106 @@
+package chat
+
+import (
+	"bufio"
+	"net"
+	"strings"
+	"time"
+)
+
+const logo = "Welcome to TCP-Chat!\n         _nnnn_\n        dGGGGMMb\n       @p~qp~~qMb\n       M|@||@) M|\n       @,----.JM|\n      JS^\\__/  qKL\n     dZP        qKRb\n    dZP          qKKb\n   fZP            SMMb\n   HZM            MMMM\n   FqM            MMMM\n __| \".        |\\dS\"qML\n |    `.       | `' \\Zq\n_)      \\.___.,|     .'\n\\____   )MMMMMP|   .'\n     `-'       `--'\n[ENTER YOUR NAME]:"
+
+// Writer writes messages from the client's out channel to their TCP connection.
+func (c *Client) Writer() {
+	for msg := range c.out {
+		_, err := c.conn.Write([]byte(msg + "\n"))
+		if err != nil {
+			return
+		}
+	}
+}
+
+// Reader reads incoming lines from the client's TCP connection.
+func (c *Client) Reader(s *Server) {
+	scanner := bufio.NewScanner(c.conn)
+
+	for scanner.Scan() {
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" {
+			continue
+		}
+
+		s.messages <- ChatMessage{
+			Timestamp: time.Now(),
+			User:      c.username,
+			Text:      text,
+		}
+	}
+
+	s.DisconnectClient(c)
+}
+
+// AcceptLoop accepts incoming connections continuously.
+func (s *Server) AcceptLoop(ln net.Listener) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			continue
+		}
+
+		s.mu.Lock()
+		if len(s.clients) >= MaxClients {
+			s.mu.Unlock()
+			conn.Write([]byte("Chat is full. Try again later.\n"))
+			conn.Close()
+			continue
+		}
+		s.mu.Unlock()
+
+		go s.handleNewConnection(conn)
+	}
+}
+
+func (s *Server) handleNewConnection(conn net.Conn) {
+	conn.Write([]byte(logo))
+
+	scanner := bufio.NewScanner(conn)
+	if !scanner.Scan() {
+		conn.Close()
+		return
+	}
+
+	name := strings.TrimRight(scanner.Text(), "\r\n")
+	if !ValidateUsername(name) {
+		conn.Write([]byte("Invalid username\n"))
+		conn.Close()
+		return
+	}
+
+	c := &Client{
+		conn:     conn,
+		username: name,
+		out:      make(chan string, 32),
+	}
+
+	if err := s.RegisterClient(c); err != nil {
+		conn.Write([]byte("Username already taken\n"))
+		conn.Close()
+		return
+	}
+
+	s.SendHistory(c)
+	s.AnnounceJoin(c.username)
+
+	go c.Writer()
+	go c.Reader(s)
+}
+
+// ListenAndServe starts the TCP listener on the given port.
+func (s *Server) ListenAndServe(port string) error {
+	ln, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return err
+	}
+	s.AcceptLoop(ln)
+	return nil
+}
