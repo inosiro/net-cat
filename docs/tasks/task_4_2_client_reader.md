@@ -4,6 +4,6 @@
 Read scanner bytes from `conn.Read()` and push messages to `server.messages`.
 
 ## Acceptance Criteria
-- [ ] Discard empty inputs.
-- [ ] Send formatted structs to `server.messages`.
-- [ ] Test standard EOF triggers a clean disconnection.
+- [x] Discard empty inputs.
+- [x] Send formatted structs to `server.messages`.
+- [x] Test standard EOF triggers a clean disconnection.

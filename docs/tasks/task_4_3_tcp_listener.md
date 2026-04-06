@@ -4,6 +4,6 @@
 Start the actual TCP server `net.Listen` and enter the `Accept()` loop.
 
 ## Acceptance Criteria
-- [ ] Setup `net.Listen` on default port `8989` (or specified).
-- [ ] Connect TCP sockets to the `Client`/`Server` logic.
-- [ ] Ensure all goroutines (`reader`, `writer`) spawn properly.
+- [x] Setup `net.Listen` on default port `8989` (or specified).
+- [x] Connect TCP sockets to the `Client`/`Server` logic.
+- [x] Ensure all goroutines (`reader`, `writer`) spawn properly.
