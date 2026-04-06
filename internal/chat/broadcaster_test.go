@@ -80,27 +80,45 @@ func TestSystemAnnouncements(t *testing.T) {
 
 	t.Run("Join announcement", func(t *testing.T) {
 		s.AnnounceJoin("Alice")
-		time.Sleep(20 * time.Millisecond)
-		if len(observer.out) == 0 {
-			t.Error("Expected observer to receive join announcement")
-		}
-		got := <-observer.out
-		expected := "Alice has joined our chat..."
-		if got != expected {
-			t.Errorf("Expected %q, got %q", expected, got)
+		// time.Sleep(20 * time.Millisecond)
+		// if len(observer.out) == 0 {
+		// 	t.Error("Expected observer to receive join announcement")
+		// }
+		// got := <-observer.out
+		// expected := "Alice has joined our chat..."
+		// if got != expected {
+		// 	t.Errorf("Expected %q, got %q", expected, got)
+		// }
+		select {
+		case got := <-observer.out:
+			expected := "Alice has joined our chat..."
+			if got != expected {
+				t.Errorf("Expected %q, got %q", expected, got)
+			}
+		case <-time.After(200 * time.Millisecond):
+			t.Error("Expected observer to receive leave announcement")
 		}
 	})
 
 	t.Run("Leave announcement", func(t *testing.T) {
 		s.AnnounceLeave("Bob")
-		time.Sleep(20 * time.Millisecond)
-		if len(observer.out) == 0 {
+		// time.Sleep(20 * time.Millisecond)
+		// if len(observer.out) == 0 {
+		// 	t.Error("Expected observer to receive leave announcement")
+		// }
+		// got := <-observer.out
+		// expected := "Bob has left our chat..."
+		// if got != expected {
+		// 	t.Errorf("Expected %q, got %q", expected, got)
+		// }
+		select {
+		case got := <-observer.out:
+			expected := "Bob has left our chat..."
+			if got != expected {
+				t.Errorf("Expected %q, got %q", expected, got)
+			}
+		case <-time.After(200 * time.Millisecond):
 			t.Error("Expected observer to receive leave announcement")
-		}
-		got := <-observer.out
-		expected := "Bob has left our chat..."
-		if got != expected {
-			t.Errorf("Expected %q, got %q", expected, got)
 		}
 	})
 }

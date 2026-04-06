@@ -189,3 +189,11 @@ Feature Implementation:
 - Fixed the CPU freezing bug in `AcceptLoop` by forcing `return` whenever `ln.Accept()` raises an error over a closed socket.
 
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-06
+User prompt: "go test -race ./... test failing for leave announcement"
+AI Assistant Output: Explained that the failure is likely due to a timing 
+issue under race detection rather than logic errors. Identified misuse of 
+time.Sleep and len(channel) in concurrent tests. Recommended using a select 
+statement with a timeout to reliably wait for messages. Provided improved 
+test code and an optional helper function for cleaner assertions.
