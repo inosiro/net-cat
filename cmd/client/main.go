@@ -28,7 +28,6 @@ func main() {
 	}
 
 	// Read username from user
-	fmt.Printf("Username: ")
 	reader := bufio.NewReader(os.Stdin)
 	username, err := reader.ReadString('\n')
 	if err != nil {
