@@ -21,11 +21,13 @@ func main() {
 	}
 	defer conn.Close()
 
-	// Read and display welcome banner
-	scanner := bufio.NewScanner(conn)
-	if scanner.Scan() {
-		fmt.Println(scanner.Text())
+	// Read and display welcome banner until we see the prompt
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil {
+		log.Fatalf("Failed to read banner: %v\n", err)
 	}
+	fmt.Print(string(buf[:n]))
 
 	// Read username from user
 	reader := bufio.NewReader(os.Stdin)
