@@ -2,23 +2,26 @@ package chat
 
 import (
 	"errors"
+	"strings"
 	"sync"
 )
 
 const MaxClients = 10
 
 type Server struct {
-	Clients  map[string]*Client
-	Mu       sync.Mutex
-	Messages chan ChatMessage
-	History  []ChatMessage
+	Clients   map[string]*Client
+	Mu        sync.Mutex
+	Messages  chan ChatMessage
+	History   []ChatMessage
+	BannedIPs map[string]bool
 }
 
 // NewServer creates a new server.
 func NewServer() *Server {
 	return &Server{
-		Clients:  make(map[string]*Client),
-		Messages: make(chan ChatMessage, 128),
+		Clients:   make(map[string]*Client),
+		Messages:  make(chan ChatMessage, 128),
+		BannedIPs: make(map[string]bool),
 	}
 }
 
@@ -47,4 +50,18 @@ func (s *Server) SendHistory(c *Client) {
 	for _, msg := range s.History {
 		c.Out <- msg.FormatMessage()
 	}
+}
+
+func (s *Server) BanIP(addr string) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	ip := strings.Split(addr, ":")[0]
+	s.BannedIPs[ip] = true
+}
+
+func (s *Server) IsIPBanned(addr string) bool {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	ip := strings.Split(addr, ":")[0]
+	return s.BannedIPs[ip]
 }

@@ -3,14 +3,17 @@ package chat
 import (
 	"net"
 	"sync"
+	"time"
 )
 
 type Client struct {
-	Conn     net.Conn
-	Username string
-	Out      chan string
-	closed   bool
-	mu       sync.Mutex
+	Conn          net.Conn
+	Username      string
+	Out           chan string
+	closed        bool
+	mu            sync.Mutex
+	lastMessageAt time.Time
+	spamCount     int
 }
 
 func (c *Client) SafeClose() bool {

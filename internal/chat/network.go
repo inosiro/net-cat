@@ -7,7 +7,12 @@ import (
 	"time"
 )
 
-const logo = "Welcome to TCP-Chat!\n         _nnnn_\n        dGGGGMMb\n       @p~qp~~qMb\n       M|@||@) M|\n       @,----.JM|\n      JS^\\__/  qKL\n     dZP        qKRb\n    dZP          qKKb\n   fZP            SMMb\n   HZM            MMMM\n   FqM            MMMM\n __| \".        |\\dS\"qML\n |    `.       | `' \\Zq\n_)      \\.___.,|     .'\n\\____   )MMMMMP|   .'\n     `-'       `--'\n[ENTER YOUR NAME]:"
+const (
+	logo              = "Welcome to TCP-Chat!\n         _nnnn_\n        dGGGGMMb\n       @p~qp~~qMb\n       M|@||@) M|\n       @,----.JM|\n      JS^\\__/  qKL\n     dZP        qKRb\n    dZP          qKKb\n   fZP            SMMb\n   HZM            MMMM\n   FqM            MMMM\n __| \".        |\\dS\"qML\n |    `.       | `' \\Zq\n_)      \\.___.,|     .'\n\\____   )MMMMMP|   .'\n     `-'       `--'\n[ENTER YOUR NAME]:"
+	MaxMessageSize    = 128
+	MessageCooldown   = 1 * time.Second
+	MaxSpamAttempts   = 5
+)
 
 // Writer writes messages from the client's out channel to their TCP connection.
 func (c *Client) Writer() {
@@ -28,6 +33,28 @@ func (c *Client) Reader(s *Server) {
 		if text == "" {
 			continue
 		}
+		if len(text) > MaxMessageSize {
+			c.Out <- "Message too long. Maximum 128 characters allowed."
+			continue
+		}
+
+		c.mu.Lock()
+		if time.Since(c.lastMessageAt) < MessageCooldown {
+			c.spamCount++
+			if c.spamCount >= MaxSpamAttempts {
+				c.mu.Unlock()
+				c.Conn.Write([]byte("You have been disconnected for spamming.\n"))
+				s.BanIP(c.Conn.RemoteAddr().String())
+				c.Conn.Close()
+				return
+			}
+			c.mu.Unlock()
+			c.Out <- "Please wait 1 second between messages."
+			continue
+		}
+		c.lastMessageAt = time.Now()
+		c.spamCount = 0
+		c.mu.Unlock()
 
 		s.Messages <- ChatMessage{
 			Timestamp: time.Now(),
@@ -61,6 +88,12 @@ func (s *Server) AcceptLoop(ln net.Listener) {
 }
 
 func (s *Server) handleNewConnection(conn net.Conn) {
+	if s.IsIPBanned(conn.RemoteAddr().String()) {
+		conn.Write([]byte("You are banned from this server.\n"))
+		conn.Close()
+		return
+	}
+
 	conn.Write([]byte(logo))
 
 	scanner := bufio.NewScanner(conn)
