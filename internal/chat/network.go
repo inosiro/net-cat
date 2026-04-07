@@ -95,7 +95,7 @@ func (s *Server) AcceptLoop(ln net.Listener) {
 
 func (s *Server) handleNewConnection(conn net.Conn) {
 	if s.IsIPBanned(conn.RemoteAddr().String()) {
-		conn.Write([]byte("You are banned from this server.\n"))
+		conn.Write([]byte("You are banned from this server for 1 minute.\n"))
 		conn.Close()
 		return
 	}

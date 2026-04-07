@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"time"
 )
 
 const MaxClients = 10
@@ -13,7 +14,7 @@ type Server struct {
 	Mu        sync.Mutex
 	Messages  chan ChatMessage
 	History   []ChatMessage
-	BannedIPs map[string]bool
+	BannedIPs map[string]time.Time
 }
 
 // NewServer creates a new server.
@@ -21,7 +22,7 @@ func NewServer() *Server {
 	return &Server{
 		Clients:   make(map[string]*Client),
 		Messages:  make(chan ChatMessage, 128),
-		BannedIPs: make(map[string]bool),
+		BannedIPs: make(map[string]time.Time),
 	}
 }
 
@@ -56,12 +57,20 @@ func (s *Server) BanIP(addr string) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	ip := strings.Split(addr, ":")[0]
-	s.BannedIPs[ip] = true
+	s.BannedIPs[ip] = time.Now().Add(1 * time.Minute)
 }
 
 func (s *Server) IsIPBanned(addr string) bool {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	ip := strings.Split(addr, ":")[0]
-	return s.BannedIPs[ip]
+	banUntil, exists := s.BannedIPs[ip]
+	if !exists {
+		return false
+	}
+	if time.Now().After(banUntil) {
+		delete(s.BannedIPs, ip)
+		return false
+	}
+	return true
 }
