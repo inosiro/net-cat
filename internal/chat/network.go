@@ -5,13 +5,14 @@ import (
 	"net"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
-	logo              = "Welcome to TCP-Chat!\n         _nnnn_\n        dGGGGMMb\n       @p~qp~~qMb\n       M|@||@) M|\n       @,----.JM|\n      JS^\\__/  qKL\n     dZP        qKRb\n    dZP          qKKb\n   fZP            SMMb\n   HZM            MMMM\n   FqM            MMMM\n __| \".        |\\dS\"qML\n |    `.       | `' \\Zq\n_)      \\.___.,|     .'\n\\____   )MMMMMP|   .'\n     `-'       `--'\n[ENTER YOUR NAME]:"
-	MaxMessageSize    = 128
-	MessageCooldown   = 1 * time.Second
-	MaxSpamAttempts   = 5
+	logo            = "Welcome to TCP-Chat!\n         _nnnn_\n        dGGGGMMb\n       @p~qp~~qMb\n       M|@||@) M|\n       @,----.JM|\n      JS^\\__/  qKL\n     dZP        qKRb\n    dZP          qKKb\n   fZP            SMMb\n   HZM            MMMM\n   FqM            MMMM\n __| \".        |\\dS\"qML\n |    `.       | `' \\Zq\n_)      \\.___.,|     .'\n\\____   )MMMMMP|   .'\n     `-'       `--'\n[ENTER YOUR NAME]:"
+	MaxMessageSize  = 128
+	MessageCooldown = 1 * time.Second
+	MaxSpamAttempts = 5
 )
 
 // Writer writes messages from the client's out channel to their TCP connection.
@@ -35,6 +36,11 @@ func (c *Client) Reader(s *Server) {
 		}
 		if len(text) > MaxMessageSize {
 			c.Out <- "Message too long. Maximum 128 characters allowed."
+			continue
+		}
+
+		if !utf8.ValidString(text) {
+			c.Out <- "Invalid UTF-8 characters in message."
 			continue
 		}
 
