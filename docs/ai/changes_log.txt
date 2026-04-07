@@ -197,3 +197,35 @@ issue under race detection rather than logic errors. Identified misuse of
 time.Sleep and len(channel) in concurrent tests. Recommended using a select 
 statement with a timeout to reliably wait for messages. Provided improved 
 test code and an optional helper function for cleaner assertions.
+
+
+Timestamp: 2026-04-06
+User Request: "i want to change the maximum size of each text message i can send to be 128 characters"
+
+AI Assistant Output & Actions:
+
+Feature Implementation:
+- Added `MaxMessageSize = 128` constant in `internal/chat/network.go`.
+- Implemented message length validation in the `Reader` function to check if incoming messages exceed 128 characters.
+- Initially truncated messages over 128 characters, then updated to reject them with a friendly error message: "Message too long. Maximum 128 characters allowed."
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-06
+User Request: "the user should be able to send message every 1 second to avoid spamming. also if he tries 5 times to send a message we must disconnect him and his ip."
+
+AI Assistant Output & Actions:
+
+Feature Implementation:
+- Added rate limiting fields to `Client` struct: `lastMessageAt time.Time` and `spamCount int` in `internal/chat/client.go`.
+- Added constants `MessageCooldown = 1 * time.Second` and `MaxSpamAttempts = 5` in `internal/chat/network.go`.
+- Implemented spam detection logic in `Reader` function that tracks message timing and counts violations.
+- Added IP banning functionality: created `BannedIPs map[string]bool` in `Server` struct in `internal/chat/server.go`.
+- Implemented `BanIP()` and `IsIPBanned()` methods to track and check banned IP addresses.
+- Updated `handleNewConnection()` to reject connections from banned IPs with message: "You are banned from this server."
+- Fixed disconnect logic to write directly to connection and close it immediately instead of using channels, ensuring proper disconnection after 5 spam attempts.
+
+Bug Fix:
+- Corrected the spam disconnect mechanism to use `c.Conn.Write()` and `c.Conn.Close()` directly instead of sending to `c.Out` channel, which was preventing proper disconnection.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
