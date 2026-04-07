@@ -6,9 +6,9 @@ import (
 )
 
 type Client struct {
-	conn     net.Conn
-	username string
-	out      chan string
+	Conn     net.Conn
+	Username string
+	Out      chan string
 	closed   bool
 	mu       sync.Mutex
 }

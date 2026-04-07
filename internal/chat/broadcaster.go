@@ -8,26 +8,26 @@ import (
 // Broadcaster is the central loop that distributes messages to all clients
 // and appends them to history. Must be run as a goroutine.
 func (s *Server) Broadcaster() {
-	for msg := range s.messages {
+	for msg := range s.Messages {
 		formatted := msg.FormatMessage()
 
-		s.mu.Lock()
-		for _, c := range s.clients {
+		s.Mu.Lock()
+		for _, c := range s.Clients {
 			select {
-			case c.out <- formatted:
+			case c.Out <- formatted:
 			default:
 				// Slow / dead client — disconnect asynchronously so we don't block
 				go s.DisconnectClient(c)
 			}
 		}
-		s.history = append(s.history, msg)
-		s.mu.Unlock()
+		s.History = append(s.History, msg)
+		s.Mu.Unlock()
 	}
 }
 
 // AnnounceJoin sends a join system message through the broadcaster.
 func (s *Server) AnnounceJoin(username string) {
-	s.messages <- ChatMessage{
+	s.Messages <- ChatMessage{
 		Timestamp: time.Now(),
 		User:      "SERVER",
 		Text:      fmt.Sprintf("%s has joined our chat...", username),
@@ -36,7 +36,7 @@ func (s *Server) AnnounceJoin(username string) {
 
 // AnnounceLeave sends a leave system message through the broadcaster.
 func (s *Server) AnnounceLeave(username string) {
-	s.messages <- ChatMessage{
+	s.Messages <- ChatMessage{
 		Timestamp: time.Now(),
 		User:      "SERVER",
 		Text:      fmt.Sprintf("%s has left our chat...", username),
@@ -50,12 +50,12 @@ func (s *Server) DisconnectClient(c *Client) {
 		return // already being disconnected
 	}
 
-	s.mu.Lock()
-	delete(s.clients, c.username)
-	close(c.out)
-	s.mu.Unlock()
+	s.Mu.Lock()
+	delete(s.Clients, c.Username)
+	close(c.Out)
+	s.Mu.Unlock()
 
-	c.conn.Close()
+	c.Conn.Close()
 
-	s.AnnounceLeave(c.username)
+	s.AnnounceLeave(c.Username)
 }
