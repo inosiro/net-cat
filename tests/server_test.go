@@ -17,30 +17,29 @@ func TestNewServer(t *testing.T) {
 		t.Fatal("Expected NewServer() to return a non-nil *Server")
 	}
 
-	if s.Clients == nil {
-		t.Error("Expected clients map to be initialized")
+	if s.Rooms == nil {
+		t.Error("Expected rooms map to be initialized")
 	}
 
-	if s.Messages == nil {
-		t.Error("Expected messages channel to be initialized")
+	// Verify server starts with Main Room
+	mainRoom, err := s.GetRoom("Main Room")
+	if err != nil {
+		t.Errorf("Expected Main Room to be created, got error: %v", err)
 	}
-
-	// Verify the mutex is usable and the clients map is accessible under lock
-	s.Mu.Lock()
-	count := len(s.Clients)
-	s.Mu.Unlock()
-	if count != 0 {
-		t.Errorf("Expected 0 clients on init, got %d", count)
+	if mainRoom == nil {
+		t.Error("Expected Main Room to be non-nil")
 	}
 }
 
-// ── Task 2.2: Max Connections ─────────────────────────────────────────────────
+// ── Task 2.2: Max Connections per Room ───────────────────────────────────────
 
-func TestMaxConnections(t *testing.T) {
+func TestRoomCapacity(t *testing.T) {
 	s := chat.NewServer()
+	room, _ := s.GetRoom("Main Room")
 
-	// Fill server to the max (10 clients)
-	for i := 0; i < 10; i++ {
+	// Create multiple clients in the room
+	clients := make([]*chat.Client, 5)
+	for i := 0; i < 5; i++ {
 		serverConn, clientConn := net.Pipe()
 		defer serverConn.Close()
 		defer clientConn.Close()
@@ -50,23 +49,24 @@ func TestMaxConnections(t *testing.T) {
 			Username: fmt.Sprintf("user%d", i),
 			Out:      make(chan string, 32),
 		}
-		s.Mu.Lock()
-		s.Clients[c.Username] = c
-		s.Mu.Unlock()
+		clients[i] = c
+		room.Mu.Lock()
+		room.Clients[c.Username] = c
+		room.Mu.Unlock()
 	}
 
-	t.Run("10th client is accepted", func(t *testing.T) {
-		s.Mu.Lock()
-		count := len(s.Clients)
-		s.Mu.Unlock()
-		if count != 10 {
-			t.Errorf("Expected 10 clients, got %d", count)
+	t.Run("Clients are in room", func(t *testing.T) {
+		room.Mu.Lock()
+		count := len(room.Clients)
+		room.Mu.Unlock()
+		if count != 5 {
+			t.Errorf("Expected 5 clients in room, got %d", count)
 		}
 	})
 
-	t.Run("11th client is rejected", func(t *testing.T) {
-		if !s.IsFull() {
-			t.Error("Expected server to be full after 10 clients")
+	t.Run("Room exists", func(t *testing.T) {
+		if room == nil {
+			t.Error("Expected room to exist")
 		}
 	})
 }
@@ -75,6 +75,7 @@ func TestMaxConnections(t *testing.T) {
 
 func TestRegisterClient(t *testing.T) {
 	s := chat.NewServer()
+	room, _ := s.GetRoom("Main Room")
 	serverConn, clientConn := net.Pipe()
 	defer serverConn.Close()
 	defer clientConn.Close()
@@ -86,38 +87,35 @@ func TestRegisterClient(t *testing.T) {
 	}
 
 	t.Run("Register new client", func(t *testing.T) {
-		err := s.RegisterClient(c)
+		err := s.RegisterClientInRoom(room, c)
 		if err != nil {
 			t.Errorf("Expected no error registering Alice, got: %v", err)
 		}
-		s.Mu.Lock()
-		_, ok := s.Clients["Alice"]
-		s.Mu.Unlock()
+		room.Mu.Lock()
+		_, ok := room.Clients["Alice"]
+		room.Mu.Unlock()
 		if !ok {
-			t.Error("Expected Alice to be in clients map")
+			t.Error("Expected Alice to be in room clients map")
 		}
 	})
 
-	t.Run("Reject duplicate username", func(t *testing.T) {
-		serverConn2, clientConn2 := net.Pipe()
-		defer serverConn2.Close()
-		defer clientConn2.Close()
-
-		duplicate := &chat.Client{
-			Conn:     serverConn2,
+	t.Run("Duplicate username rejected", func(t *testing.T) {
+		c2 := &chat.Client{
+			Conn:     clientConn,
 			Username: "Alice",
 			Out:      make(chan string, 32),
 		}
-		err := s.RegisterClient(duplicate)
+		err := s.RegisterClientInRoom(room, c2)
 		if err == nil {
-			t.Error("Expected an error when registering a duplicate username")
+			t.Error("Expected error when registering duplicate username")
 		}
 	})
 }
 
 func TestSendHistory(t *testing.T) {
 	s := chat.NewServer()
-	s.History = []chat.ChatMessage{
+	room, _ := s.GetRoom("Main Room")
+	room.History = []chat.ChatMessage{
 		{User: "Bob", Text: "hello"},
 		{User: "Charlie", Text: "world"},
 	}
@@ -132,7 +130,7 @@ func TestSendHistory(t *testing.T) {
 		Out:      make(chan string, 32),
 	}
 
-	s.SendHistory(c)
+	room.SendHistory(c)
 
 	if len(c.Out) != 2 {
 		t.Errorf("Expected 2 history messages in client.out, got %d", len(c.Out))

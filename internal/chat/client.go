@@ -10,6 +10,7 @@ type Client struct {
 	Conn          net.Conn
 	Username      string
 	Out           chan string
+	currentRoom   *Room
 	closed        bool
 	mu            sync.Mutex
 	lastMessageAt time.Time

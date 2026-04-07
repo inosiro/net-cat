@@ -2,6 +2,7 @@ package chat
 
 import (
 	"bufio"
+	"fmt"
 	"net"
 	"strings"
 	"time"
@@ -26,7 +27,8 @@ func (c *Client) Writer() {
 }
 
 // Reader reads incoming lines from the client's TCP connection.
-func (c *Client) Reader(s *Server) {
+func (c *Client) Reader(room *Room, s *Server) {
+	c.currentRoom = room
 	scanner := bufio.NewScanner(c.Conn)
 
 	for scanner.Scan() {
@@ -34,6 +36,104 @@ func (c *Client) Reader(s *Server) {
 		if text == "" {
 			continue
 		}
+
+		// Handle /switch command
+		if strings.HasPrefix(text, "/switch ") {
+			newRoomName := strings.TrimSpace(text[8:])
+			if newRoomName == "" {
+				c.Out <- "Usage: /switch <roomname>"
+				continue
+			}
+
+			newRoom, err := s.GetRoom(newRoomName)
+			if err != nil {
+				c.Out <- fmt.Sprintf("Room not found: %s", newRoomName)
+				continue
+			}
+
+			// Remove from old room
+			oldRoom := c.currentRoom
+			oldRoom.Mu.Lock()
+			delete(oldRoom.Clients, c.Username)
+			oldRoom.Mu.Unlock()
+
+			// Add to new room
+			newRoom.Mu.Lock()
+			if _, exists := newRoom.Clients[c.Username]; exists {
+				newRoom.Mu.Unlock()
+				c.Out <- "Username already taken in that room"
+				// Re-add to old room
+				oldRoom.Mu.Lock()
+				oldRoom.Clients[c.Username] = c
+				oldRoom.Mu.Unlock()
+				continue
+			}
+			newRoom.Clients[c.Username] = c
+			newRoom.Mu.Unlock()
+
+			// Update current room reference
+			c.currentRoom = newRoom
+
+			// Announce leave from old room
+			oldRoom.Messages <- ChatMessage{
+				Timestamp: time.Now(),
+				User:      "SERVER",
+				Text:      fmt.Sprintf("%s left %s", c.Username, oldRoom.Name),
+			}
+
+			// Announce join to new room
+			newRoom.Messages <- ChatMessage{
+				Timestamp: time.Now(),
+				User:      "SERVER",
+				Text:      fmt.Sprintf("%s joined %s", c.Username, newRoom.Name),
+			}
+
+			// Send new room history
+			newRoom.SendHistory(c)
+			c.Out <- fmt.Sprintf("Switched to room: %s", newRoom.Name)
+			continue
+		}
+
+		// Handle /nick command
+		if strings.HasPrefix(text, "/nick ") {
+			newName := strings.TrimSpace(text[6:])
+			if newName == "" || !ValidateUsername(newName) {
+				c.Out <- "Invalid username"
+				continue
+			}
+
+			// Check if new name already exists in room
+			c.currentRoom.Mu.Lock()
+			if _, exists := c.currentRoom.Clients[newName]; exists && newName != c.Username {
+				c.currentRoom.Mu.Unlock()
+				c.Out <- "Username already taken in this room"
+				continue
+			}
+
+			// Update client's username
+			oldName := c.Username
+			delete(c.currentRoom.Clients, oldName)
+			c.Username = newName
+			c.currentRoom.Clients[newName] = c
+			c.currentRoom.Mu.Unlock()
+
+			// Announce nick change
+			c.currentRoom.Messages <- ChatMessage{
+				Timestamp: time.Now(),
+				User:      "SERVER",
+				Text:      fmt.Sprintf("%s changed nickname to %s", oldName, newName),
+			}
+			continue
+		}
+
+		// Handle /stats command
+		if text == "/stats" {
+			totalRooms := s.GetRoomCount()
+			totalUsers := s.GetTotalUserCount()
+			c.Out <- fmt.Sprintf("Server Stats: %d rooms, %d total users", totalRooms, totalUsers)
+			continue
+		}
+
 		if len(text) > MaxMessageSize {
 			c.Out <- "Message too long. Maximum 128 characters allowed."
 			continue
@@ -62,14 +162,25 @@ func (c *Client) Reader(s *Server) {
 		c.spamCount = 0
 		c.mu.Unlock()
 
-		s.Messages <- ChatMessage{
+		c.currentRoom.Messages <- ChatMessage{
 			Timestamp: time.Now(),
 			User:      c.Username,
 			Text:      text,
 		}
 	}
 
-	s.DisconnectClient(c)
+	if !c.SafeClose() {
+		return
+	}
+
+	c.currentRoom.Mu.Lock()
+	delete(c.currentRoom.Clients, c.Username)
+	close(c.Out)
+	c.currentRoom.Mu.Unlock()
+
+	c.Conn.Close()
+
+	s.AnnounceLeave(c.currentRoom, c.Username)
 }
 
 // AcceptLoop accepts incoming connections continuously.
@@ -79,15 +190,6 @@ func (s *Server) AcceptLoop(ln net.Listener) {
 		if err != nil {
 			continue
 		}
-
-		s.Mu.Lock()
-		if len(s.Clients) >= MaxClients {
-			s.Mu.Unlock()
-			conn.Write([]byte("Chat is full. Try again later.\n"))
-			conn.Close()
-			continue
-		}
-		s.Mu.Unlock()
 
 		go s.handleNewConnection(conn)
 	}
@@ -121,17 +223,74 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 		Out:      make(chan string, 32),
 	}
 
-	if err := s.RegisterClient(c); err != nil {
-		conn.Write([]byte("Username already taken\n"))
+	// Show available rooms
+	rooms := s.ListRooms()
+	roomList := "Available rooms:\n"
+	for i, room := range rooms {
+		roomList += fmt.Sprintf("%d. %s\n", i+1, room)
+	}
+	roomList += fmt.Sprintf("%d. [Create new room]\n", len(rooms)+1)
+	roomList += "Select room (enter number): "
+	conn.Write([]byte(roomList))
+
+	// Read room selection
+	if !scanner.Scan() {
 		conn.Close()
 		return
 	}
 
-	s.SendHistory(c)
-	s.AnnounceJoin(c.Username)
+	selection := strings.TrimSpace(scanner.Text())
+	var selectedRoom *Room
+	var err error
 
+	if selection == fmt.Sprintf("%d", len(rooms)+1) {
+		// Create new room
+		conn.Write([]byte("Enter room name: "))
+		if !scanner.Scan() {
+			conn.Close()
+			return
+		}
+		roomName := strings.TrimSpace(scanner.Text())
+		if roomName == "" {
+			conn.Write([]byte("Invalid room name\n"))
+			conn.Close()
+			return
+		}
+		selectedRoom, err = s.CreateRoom(roomName)
+		if err != nil {
+			conn.Write([]byte("Failed to create room: " + err.Error() + "\n"))
+			conn.Close()
+			return
+		}
+		// Start broadcaster for new room
+		go selectedRoom.RoomBroadcaster()
+	} else {
+		// Join existing room
+		roomIndex := 0
+		if _, err := fmt.Sscanf(selection, "%d", &roomIndex); err != nil || roomIndex < 1 || roomIndex > len(rooms) {
+			conn.Write([]byte("Invalid selection\n"))
+			conn.Close()
+			return
+		}
+		selectedRoom = s.Rooms[rooms[roomIndex-1]]
+	}
+
+	// Register client in room
+	if err := s.RegisterClientInRoom(selectedRoom, c); err != nil {
+		conn.Write([]byte("Username already taken in this room\n"))
+		conn.Close()
+		return
+	}
+
+	// Send room history
+	selectedRoom.SendHistory(c)
+
+	// Announce join
+	s.AnnounceJoin(selectedRoom, c.Username)
+
+	// Start writer and reader
 	go c.Writer()
-	go c.Reader(s)
+	go c.Reader(selectedRoom, s)
 }
 
 // ListenAndServe starts the TCP listener on the given port.

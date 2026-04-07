@@ -14,7 +14,10 @@ func main() {
 	log.Printf("Starting TCP-Chat server on port %s\n", port)
 
 	s := chat.NewServer()
-	go s.Broadcaster()
+
+	// Start broadcaster for Main Room
+	mainRoom, _ := s.GetRoom("Main Room")
+	go mainRoom.RoomBroadcaster()
 
 	if err := s.ListenAndServe(port); err != nil {
 		log.Fatalf("Server error: %v\n", err)

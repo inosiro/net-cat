@@ -10,47 +10,93 @@ import (
 const MaxClients = 10
 
 type Server struct {
-	Clients   map[string]*Client
+	Rooms     map[string]*Room
 	Mu        sync.Mutex
-	Messages  chan ChatMessage
-	History   []ChatMessage
 	BannedIPs map[string]time.Time
 }
 
-// NewServer creates a new server.
+// NewServer creates a new server with a default "Main Room".
 func NewServer() *Server {
-	return &Server{
-		Clients:   make(map[string]*Client),
-		Messages:  make(chan ChatMessage, 128),
+	s := &Server{
+		Rooms:     make(map[string]*Room),
 		BannedIPs: make(map[string]time.Time),
 	}
+	s.Rooms["Main Room"] = NewRoom("Main Room")
+	return s
 }
 
-// IsFull checks if the server is full.
-func (s *Server) IsFull() bool {
+// CreateRoom creates a new room if it doesn't exist.
+func (s *Server) CreateRoom(name string) (*Room, error) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	return len(s.Clients) >= MaxClients
-}
-
-// RegisterClient registers a new client.
-func (s *Server) RegisterClient(c *Client) error {
-	s.Mu.Lock()
-	defer s.Mu.Unlock()
-	if _, exists := s.Clients[c.Username]; exists {
-		return errors.New("username already taken: " + c.Username)
+	if len(s.Rooms) >= MaxRooms {
+		return nil, errors.New("server is full: maximum rooms reached")
 	}
-	s.Clients[c.Username] = c
+	if _, exists := s.Rooms[name]; exists {
+		return nil, errors.New("room already exists: " + name)
+	}
+	room := NewRoom(name)
+	s.Rooms[name] = room
+	return room, nil
+}
+
+// GetRoom retrieves a room by name.
+func (s *Server) GetRoom(name string) (*Room, error) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	if room, exists := s.Rooms[name]; exists {
+		return room, nil
+	}
+	return nil, errors.New("room not found: " + name)
+}
+
+// ListRooms returns a list of room names.
+func (s *Server) ListRooms() []string {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	rooms := make([]string, 0, len(s.Rooms))
+	for name := range s.Rooms {
+		rooms = append(rooms, name)
+	}
+	return rooms
+}
+
+// RegisterClientInRoom adds a client to a room.
+func (s *Server) RegisterClientInRoom(room *Room, c *Client) error {
+	room.Mu.Lock()
+	defer room.Mu.Unlock()
+	if _, exists := room.Clients[c.Username]; exists {
+		return errors.New("username already taken in this room: " + c.Username)
+	}
+	room.Clients[c.Username] = c
 	return nil
 }
 
-// SendHistory sends the chat history to a client.
-func (s *Server) SendHistory(c *Client) {
+// DisconnectClientFromRoom removes a client from a room.
+func (s *Server) DisconnectClientFromRoom(room *Room, username string) {
+	room.Mu.Lock()
+	defer room.Mu.Unlock()
+	delete(room.Clients, username)
+}
+
+// GetTotalUserCount returns total users across all rooms
+func (s *Server) GetTotalUserCount() int {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	for _, msg := range s.History {
-		c.Out <- msg.FormatMessage()
+	total := 0
+	for _, room := range s.Rooms {
+		room.Mu.Lock()
+		total += len(room.Clients)
+		room.Mu.Unlock()
 	}
+	return total
+}
+
+// GetRoomCount returns the number of rooms
+func (s *Server) GetRoomCount() int {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	return len(s.Rooms)
 }
 
 func (s *Server) BanIP(addr string) {
