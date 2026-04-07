@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"unicode/utf8"
 )
 
 func main() {
@@ -27,6 +28,7 @@ func main() {
 	}
 
 	// Read username from user
+	fmt.Printf("Username: ")
 	reader := bufio.NewReader(os.Stdin)
 	username, err := reader.ReadString('\n')
 	if err != nil {
@@ -34,6 +36,9 @@ func main() {
 	}
 
 	username = strings.TrimRight(username, "\r\n")
+	if !utf8.ValidString(username) {
+		log.Fatalf("No valid utf8 username: %s\n", err)
+	}
 
 	// Send username to server
 	_, err = conn.Write([]byte(username + "\n"))
