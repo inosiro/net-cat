@@ -366,3 +366,91 @@ Feature Completeness Summary:
 ✅ Non-blocking I/O patterns
 
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
+Timestamp: 2026-04-17
+User Request: "i want to create some functionalities. 1.(/leave) should quit the client 2.(/switch "room name") join specific room that already exists if it doesn't exists create it 3.(/rooms) show all available rooms 4.(/users) show all users 5.(/nick "name") functionality of the user to change his nickname"
+
+AI Assistant Output & Actions:
+
+Feature Implementation - Command Enhancements:
+- Added `/leave` command in `internal/chat/network.go` Reader() function:
+  - Writes "Goodbye!" message to client
+  - Closes connection immediately
+  - Returns from Reader goroutine to disconnect client completely
+
+- Modified `/switch` command in `internal/chat/network.go`:
+  - Changed behavior to auto-create room if it doesn't exist
+  - Calls `s.CreateRoom(newRoomName)` when `s.GetRoom()` returns error
+  - Starts broadcaster goroutine for newly created rooms: `go newRoom.RoomBroadcaster()`
+  - Maintains existing functionality: removes from old room, adds to new room, announces join/leave
+
+- Added `/rooms` command in `internal/chat/network.go`:
+  - Lists all available rooms with user counts
+  - Format: "  <room name> (<count> users)"
+  - Uses `s.ListRooms()` and `room.ClientCount()` methods
+  - Sends output through client's Out channel
+
+- Added `/users` command in `internal/chat/network.go`:
+  - Shows all users across all rooms
+  - Groups users by room name
+  - Format: "  [<room name>]: <user1>, <user2>, ..."
+  - Iterates through all rooms using `s.ListRooms()` and `room.GetClients()`
+  - Only displays rooms that have users
+
+- Kept `/nick` command as-is (already implemented):
+  - Validates new username with `ValidateUsername()`
+  - Checks for username conflicts in current room
+  - Updates client's username in room's Clients map
+  - Announces nickname change to room
+
+Client CLI Updates:
+- Updated `cmd/client/main.go` serverCommands list:
+  - Added `/rooms`, `/users`, `/leave` to server-side commands
+  - Removed client-side handling of these commands (was showing "temporarily unavailable" messages)
+  - Commands now properly forwarded to server for processing
+
+Bug Fix:
+- Fixed client-side command routing that was intercepting `/rooms` and `/users` commands
+  - Previously showed "[/rooms - Room listing temporarily unavailable]" and "[/users - User listing temporarily unavailable]"
+  - Now properly sends these commands to server for execution
+
+Files Modified:
+- `/home/panokatos/net-cat/internal/chat/network.go` - Added /leave, /rooms, /users commands; modified /switch to auto-create rooms
+- `/home/panokatos/net-cat/cmd/client/main.go` - Updated serverCommands list to include new commands
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-17
+User Request: "next functionality i want to do is to create a direct message function. the user sends /dm <username> but only to him. the responder should get [DM From "username of sender"][2026-04-17 19:11:58]: <message>"
+
+AI Assistant Output & Actions:
+
+Feature Implementation - Direct Messaging:
+- Added `/dm` command in `internal/chat/network.go` Reader() function:
+  - Syntax: `/dm <username> <message>` (all in one line)
+  - Parses command using `strings.SplitN(text[4:], " ", 2)` to separate username and message
+  - Validates message is not empty (rejects if empty or only whitespace)
+  - Searches for target user across all rooms (not limited to current room)
+  - Iterates through all rooms using `s.ListRooms()` and checks each room's Clients map
+  - Returns "This username doesnt exists" if target user not found
+  - Sends DM to target user with format: `[DM From "<sender>"][YYYY-MM-DD HH:MM:SS]: <message>`
+  - Uses `time.Now().Format("2006-01-02 15:04:05")` for timestamp
+  - Sends confirmation to sender: "DM sent to <username>"
+  - Message delivered through target client's Out channel (non-blocking)
+
+Client CLI Updates:
+- Updated `cmd/client/main.go` serverCommands list:
+  - Added `/dm` to server-side commands for proper routing to server
+  - Client now forwards `/dm` commands to server instead of handling locally
+
+Implementation Details:
+- Cross-room messaging: Users can DM anyone on the server regardless of room location
+- Thread-safe: Uses room mutex locks when searching through client maps
+- Non-blocking: Uses client's Out channel for message delivery
+- Error handling: Validates username exists before attempting to send
+- Empty message prevention: Checks message content before processing
+
+Files Modified:
+- `/home/panokatos/net-cat/internal/chat/network.go` - Added /dm command handler with cross-room user search
+- `/home/panokatos/net-cat/cmd/client/main.go` - Added /dm to serverCommands list
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
