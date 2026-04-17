@@ -245,7 +245,7 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 
 	if selection == fmt.Sprintf("%d", len(rooms)+1) {
 		// Create new room
-		conn.Write([]byte("Enter room name: "))
+		conn.Write([]byte("Please enter a name for your new room.\n"))
 		if !scanner.Scan() {
 			conn.Close()
 			return
