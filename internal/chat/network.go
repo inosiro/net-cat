@@ -37,6 +37,38 @@ func (c *Client) Reader(room *Room, s *Server) {
 			continue
 		}
 
+		// Handle /leave command
+		if text == "/leave" {
+			c.Conn.Write([]byte("Goodbye!\n"))
+			c.Conn.Close()
+			return
+		}
+
+		// Handle /rooms command
+		if text == "/rooms" {
+			rooms := s.ListRooms()
+			c.Out <- "Available rooms:"
+			for _, roomName := range rooms {
+				room, _ := s.GetRoom(roomName)
+				c.Out <- fmt.Sprintf("  %s (%d users)", roomName, room.ClientCount())
+			}
+			continue
+		}
+
+		// Handle /users command
+		if text == "/users" {
+			c.Out <- "All users:"
+			rooms := s.ListRooms()
+			for _, roomName := range rooms {
+				room, _ := s.GetRoom(roomName)
+				clients := room.GetClients()
+				if len(clients) > 0 {
+					c.Out <- fmt.Sprintf("  [%s]: %s", roomName, strings.Join(clients, ", "))
+				}
+			}
+			continue
+		}
+
 		// Handle /switch command
 		if strings.HasPrefix(text, "/switch ") {
 			newRoomName := strings.TrimSpace(text[8:])
@@ -47,8 +79,14 @@ func (c *Client) Reader(room *Room, s *Server) {
 
 			newRoom, err := s.GetRoom(newRoomName)
 			if err != nil {
-				c.Out <- fmt.Sprintf("Room not found: %s", newRoomName)
-				continue
+				// Room doesn't exist, create it
+				newRoom, err = s.CreateRoom(newRoomName)
+				if err != nil {
+					c.Out <- fmt.Sprintf("Failed to create room: %s", err.Error())
+					continue
+				}
+				// Start broadcaster for new room
+				go newRoom.RoomBroadcaster()
 			}
 
 			// Remove from old room

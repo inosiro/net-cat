@@ -131,7 +131,7 @@ func clientWriter(conn net.Conn, reader *bufio.Reader, username string) {
 		line = strings.TrimRight(line, "\r\n")
 
 		// Commands that are server-side (send to server)
-		serverCommands := []string{"/nick", "/stats", "/switch"}
+		serverCommands := []string{"/nick", "/stats", "/switch", "/rooms", "/users", "/leave"}
 		isServerCommand := false
 		for _, cmd := range serverCommands {
 			if strings.HasPrefix(line, cmd) {
@@ -171,10 +171,6 @@ func handleCommand(cmd string, username string) {
 	command := parts[0]
 
 	switch command {
-	case "/leave":
-		fmt.Println("Leaving chat...")
-		os.Exit(0)
-
 	case "/history":
 		if len(chatHistory) == 0 {
 			fmt.Println("[No history available]")
@@ -185,12 +181,6 @@ func handleCommand(cmd string, username string) {
 			fmt.Println(msg)
 		}
 		fmt.Println("=== End History ===")
-
-	case "/rooms":
-		fmt.Println("[/rooms - Room listing temporarily unavailable]")
-
-	case "/users":
-		fmt.Println("[/users - User listing temporarily unavailable]")
 
 	case "/switch":
 		fmt.Println("Usage: /switch <roomname>")
