@@ -131,7 +131,7 @@ func clientWriter(conn net.Conn, reader *bufio.Reader, username string) {
 		line = strings.TrimRight(line, "\r\n")
 
 		// Commands that are server-side (send to server)
-		serverCommands := []string{"/nick", "/stats", "/switch", "/rooms", "/users", "/leave"}
+		serverCommands := []string{"/nick", "/stats", "/switch", "/rooms", "/users", "/leave", "/dm"}
 		isServerCommand := false
 		for _, cmd := range serverCommands {
 			if strings.HasPrefix(line, cmd) {

@@ -44,6 +44,44 @@ func (c *Client) Reader(room *Room, s *Server) {
 			return
 		}
 
+		// Handle /dm command
+		if strings.HasPrefix(text, "/dm ") {
+			parts := strings.SplitN(text[4:], " ", 2)
+			if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
+				c.Out <- "Usage: /dm <username> <message>"
+				continue
+			}
+			targetUsername := strings.TrimSpace(parts[0])
+			message := strings.TrimSpace(parts[1])
+
+			// Find target user across all rooms
+			var targetClient *Client
+			rooms := s.ListRooms()
+			for _, roomName := range rooms {
+				room, _ := s.GetRoom(roomName)
+				room.Mu.Lock()
+				if client, exists := room.Clients[targetUsername]; exists {
+					targetClient = client
+					room.Mu.Unlock()
+					break
+				}
+				room.Mu.Unlock()
+			}
+
+			if targetClient == nil {
+				c.Out <- "This username doesnt exists"
+				continue
+			}
+
+			// Send DM to target user
+			dmMessage := fmt.Sprintf("[DM From %q][%s]: %s", c.Username, time.Now().Format("2006-01-02 15:04:05"), message)
+			targetClient.Out <- dmMessage
+
+			// Send confirmation to sender
+			c.Out <- fmt.Sprintf("DM sent to %s", targetUsername)
+			continue
+		}
+
 		// Handle /rooms command
 		if text == "/rooms" {
 			rooms := s.ListRooms()
