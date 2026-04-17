@@ -1,6 +1,11 @@
-1. utf -8 valid characters gia to username kai to text 
-2. Να μην μπορει να γινει login με echo
-3. to mege8os tou text message na einai 128 characters
-4. εντολες (/history,/quit, /help, /join, /rooms, /users, /dm<username> , /rename )
+1. utf -8 valid characters gia to username kai to text  done 
+2. Να μην μπορει να γινει login με echo     done
+3. to mege8os tou text message na einai 128 characters  done
+4. εντολες (/history,/quit, /help, /join, /rooms, /users, /dm<username> , /rename ) done
+
 5. οταν ο user στελνει μηνυμα να μην εμφανιζεται σε αυτον
 6. να χρησιμοποιησουμε το terminal ui https://github.com/jroimartin/gocui (we need to create a client to do this)
+7. να φτιαξουμε testers 
+8. Να ελεγξουμε λεπτομεριες στον κωδικα 
+9. εναν τελικο ελεγχο μαζι με το audit 
+10. readme
