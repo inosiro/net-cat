@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"netcat/internal/ui"
 	"os"
 	"strings"
 	"unicode/utf8"
@@ -13,6 +14,7 @@ import (
 var (
 	verbose     = false
 	quiet       = false
+	uiMode      = false
 	chatHistory []string
 )
 
@@ -21,6 +23,17 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
+	}
+
+	if uiMode {
+		uiApp, err := ui.NewUI()
+		if err != nil {
+			log.Fatalf("Failed to create UI: %v\n", err)
+		}
+		if err := uiApp.Start(addr); err != nil {
+			log.Fatalf("UI error: %v\n", err)
+		}
+		return
 	}
 
 	if !quiet {
@@ -224,6 +237,9 @@ func parseFlags() (string, error) {
 				return "", fmt.Errorf("error: -v and -q are mutually exclusive")
 			}
 			quiet = true
+			flagEnd = i + 1
+		} else if arg == "-ui" {
+			uiMode = true
 			flagEnd = i + 1
 		} else if strings.HasPrefix(arg, "-") {
 			return "", fmt.Errorf("unknown flag: %s", arg)
