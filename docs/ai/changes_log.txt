@@ -454,3 +454,105 @@ Files Modified:
 - `/home/panokatos/net-cat/cmd/client/main.go` - Added /dm to serverCommands list
 
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-17
+User Request: "Implement UI mode for the client using gocui library with -ui flag"
+
+AI Assistant Output & Actions:
+
+Feature Implementation - Terminal UI Mode:
+- Created new UI package in `internal/ui/` with two files:
+  - `internal/ui/ui.go` - Main UI logic with gocui implementation
+  - `internal/ui/client.go` - Network client wrapper for UI mode
+
+UI Architecture:
+- Three-stage UI flow:
+  1. Username prompt view (centered input box)
+  2. Room selection view (displays numbered room list)
+  3. Main chat interface (4-panel layout)
+
+Main Chat Interface Layout:
+- Rooms panel (left top): Displays available rooms
+- Users panel (left bottom): Displays users in current room
+- Chat history panel (right top): Scrollable message display with auto-scroll
+- Input panel (right bottom): Editable text input for messages and commands
+
+UI Features Implemented:
+- Blinking cursor in input field (`g.Cursor = true`)
+- Enter key to send messages
+- Ctrl+C to quit application
+- Arrow Up/Down keys to scroll chat history (bound to input view)
+- All existing commands work: /nick, /switch, /history, /stats, /rooms, /users, /leave, /help
+- Client-side commands (/history, /help) handled locally in UI
+- Server-side commands forwarded to server
+
+Client Integration:
+- Modified `cmd/client/main.go`:
+  - Added `-ui` flag parsing in `parseFlags()` function
+  - Added `uiMode` boolean variable
+  - Added UI mode check in main() that launches UI instead of terminal mode
+  - Imported `netcat/internal/ui` package
+  - Preserved existing terminal mode when no -ui flag
+
+Network Communication:
+- UIClient wraps TCP connection and handles:
+  - Banner reading on connection
+  - Username submission
+  - Room selection submission
+  - Message sending
+  - Asynchronous message reading in background goroutine
+
+UI State Management:
+- Automatic room/user panel population:
+  - Rooms populated from initial room selection screen
+  - Users initialized with current username on room join
+  - Auto-sends `/users` and `/rooms` commands 300ms after joining
+  - Parses server responses to update panels dynamically
+
+Response Parsing Logic:
+- State machine with flags: `collectingRooms`, `collectingUsers`
+- Detects "Available rooms:" and collects lines starting with "  " containing "("
+- Detects "All users:" and collects lines starting with "  [" containing "]: "
+- Timeout mechanism: 50ms timer after each collected line to force UI update
+- Prevents blocking on scanner.Scan() waiting for next message
+
+Bug Fixes During Implementation:
+1. Fixed cursor visibility by enabling `g.Cursor = true`
+2. Fixed arrow key scrolling by binding to "input" view instead of "chat" view
+3. Fixed rooms/users panels not populating until message sent:
+   - Added timeout goroutines that fire after 50ms of no new matching lines
+   - Updates UI immediately without waiting for next scanner line
+4. Fixed input field not clearing cursor position after send
+5. Added gocui import to client.go for g.Update() calls
+
+Dependencies Added:
+- `github.com/jroimartin/gocui v0.5.0`
+- `github.com/mattn/go-runewidth v0.0.9` (transitive)
+- `github.com/nsf/termbox-go v1.1.1` (transitive)
+
+Usage:
+- `./client -ui` - Launch UI mode on localhost:8989
+- `./client -ui host port` - Launch UI mode on custom host/port
+- `./client` - Normal terminal mode (unchanged)
+
+Files Created:
+- `/home/panokatos/net-cat/internal/ui/ui.go` - Main UI implementation with gocui
+- `/home/panokatos/net-cat/internal/ui/client.go` - UI network client wrapper
+
+Files Modified:
+- `/home/panokatos/net-cat/cmd/client/main.go` - Added -ui flag support and UI mode integration
+- `/home/panokatos/net-cat/go.mod` - Added gocui dependency
+
+Build & Test:
+- Successfully built client binary with UI support
+- Tested UI mode with multiple scenarios:
+  - Username prompt and room selection work correctly
+  - All 4 panels display properly
+  - Messages appear in chat history
+  - Commands execute correctly (/rooms, /users, /switch, etc.)
+  - Rooms and users panels populate automatically on join
+  - Cursor blinks in input field
+  - Arrow keys scroll chat history
+  - Ctrl+C exits cleanly
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
