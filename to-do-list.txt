@@ -9,3 +9,7 @@
 8. Να ελεγξουμε λεπτομεριες στον κωδικα 
 9. εναν τελικο ελεγχο μαζι με το audit 
 10. readme
+
+11. close ui when user leaves
+12. update rooms/users window when an event happen
+13. test output filename log for server, add log for users connecting/disconnecting
