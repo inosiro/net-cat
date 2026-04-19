@@ -3,6 +3,7 @@ package chat
 import (
 	"errors"
 	"net"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -80,6 +81,7 @@ func (s *Server) ListRooms() []string {
 	for name := range s.Rooms {
 		rooms = append(rooms, name)
 	}
+	slices.Sort(rooms)
 	return rooms
 }
 
