@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -53,6 +54,7 @@ func (r *Room) GetClients() []string {
 	for username := range r.Clients {
 		clients = append(clients, username)
 	}
+	slices.Sort(clients)
 	return clients
 }
 

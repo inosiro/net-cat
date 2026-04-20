@@ -40,6 +40,17 @@ func (c *Client) Reader(room *Room, s *Server) {
 		// Handle /leave command
 		if text == "/leave" {
 			c.Conn.Write([]byte("Goodbye!\n"))
+
+			// Properly clean up the client
+			if c.SafeClose() {
+				c.currentRoom.Mu.Lock()
+				delete(c.currentRoom.Clients, c.Username)
+				close(c.Out)
+				c.currentRoom.Mu.Unlock()
+
+				s.AnnounceLeave(c.currentRoom, c.Username)
+			}
+
 			c.Conn.Close()
 			return
 		}
