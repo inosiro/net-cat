@@ -13,12 +13,13 @@ import (
 
 func main() {
 	// ui and address flag for client mode
+	var clientFlag = flag.Bool("c", false, "client mode")
 	var uiFlag = flag.Bool("ui", false, "Enable console user interface (client)")
 	var addrFlag = flag.String("s", "127.0.0.1", "Specify source `IP address` to use")
 
 	// output log and listen flag for server mode
 	var outputFlag = flag.String("o", "", "Dump session data to a `filename` (server)")
-	var listenFlag = flag.Bool("l", false, "Bind and listen for incoming connections (server)")
+	// var listenFlag = flag.Bool("l", false, "Bind and listen for incoming connections (server)")
 
 	flag.Parse()
 	argsAfterFlags := flag.Args()
@@ -31,7 +32,7 @@ func main() {
 		port = argsAfterFlags[0]
 	}
 
-	if *listenFlag { // server mode
+	if !*clientFlag { // server mode
 
 		if len(*outputFlag) > 0 {
 			f, err := os.OpenFile(*outputFlag, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
