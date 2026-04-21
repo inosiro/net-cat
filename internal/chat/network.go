@@ -2,7 +2,9 @@ package chat
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 	"time"
@@ -43,10 +45,8 @@ func (c *Client) Reader(room *Room, s *Server) {
 
 			// Properly clean up the client
 			if c.SafeClose() {
-				c.currentRoom.Mu.Lock()
-				delete(c.currentRoom.Clients, c.Username)
+				s.DisconnectClientFromRoom(c.currentRoom, c.Username)
 				close(c.Out)
-				c.currentRoom.Mu.Unlock()
 
 				s.AnnounceLeave(c.currentRoom, c.Username)
 			}
@@ -140,9 +140,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 
 			// Remove from old room
 			oldRoom := c.currentRoom
-			oldRoom.Mu.Lock()
-			delete(oldRoom.Clients, c.Username)
-			oldRoom.Mu.Unlock()
+			s.DisconnectClientFromRoom(oldRoom, c.Username)
 
 			// Add to new room
 			newRoom.Mu.Lock()
@@ -160,6 +158,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 
 			// Update current room reference
 			c.currentRoom = newRoom
+			log.Printf("Client %s switched room from %s to %s\n", c.Username, oldRoom.Name, newRoom.Name)
 
 			// Announce leave from old room
 			oldRoom.Messages <- ChatMessage{
@@ -238,6 +237,11 @@ func (c *Client) Reader(room *Room, s *Server) {
 				c.mu.Unlock()
 				c.Conn.Write([]byte("You have been disconnected for spamming.\n"))
 				s.BanIP(c.Conn.RemoteAddr().String())
+				if c.SafeClose() {
+					s.DisconnectClientFromRoom(c.currentRoom, c.Username)
+					close(c.Out)
+					s.AnnounceLeave(c.currentRoom, c.Username)
+				}
 				c.Conn.Close()
 				return
 			}
@@ -260,10 +264,8 @@ func (c *Client) Reader(room *Room, s *Server) {
 		return
 	}
 
-	c.currentRoom.Mu.Lock()
-	delete(c.currentRoom.Clients, c.Username)
+	s.DisconnectClientFromRoom(c.currentRoom, c.Username)
 	close(c.Out)
-	c.currentRoom.Mu.Unlock()
 
 	c.Conn.Close()
 
@@ -317,7 +319,7 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 		roomList += fmt.Sprintf("%d. %s\n", i+1, room)
 	}
 	roomList += fmt.Sprintf("%d. [Create new room]\n", len(rooms)+1)
-	roomList += "Select room (enter number): "
+	roomList += "Select room (enter number):\n"
 	conn.Write([]byte(roomList))
 
 	// Read room selection
@@ -364,6 +366,11 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 
 	// Register client in room
 	if err := s.RegisterClientInRoom(selectedRoom, c); err != nil {
+		if errors.Is(err, ErrServerFull) {
+			conn.Write([]byte("Chat is full. Try again later.\n"))
+			conn.Close()
+			return
+		}
 		conn.Write([]byte("Username already taken in this room\n"))
 		conn.Close()
 		return

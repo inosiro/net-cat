@@ -6,14 +6,14 @@ import (
 	"net"
 	"strings"
 	"time"
-
-	"github.com/jroimartin/gocui"
 )
 
 type UIClient struct {
-	conn     net.Conn
-	username string
-	ui       *UI
+	conn                    net.Conn
+	username                string
+	ui                      *UI
+	awaitingInitialRoomList bool
+	awaitingRoomJoin        bool
 }
 
 func NewUIClient(addr string, ui *UI) (*UIClient, error) {
@@ -41,25 +41,12 @@ func NewUIClient(addr string, ui *UI) (*UIClient, error) {
 
 func (c *UIClient) SendUsername() {
 	c.conn.Write([]byte(c.username + "\n"))
+	c.awaitingInitialRoomList = true
 }
 
 func (c *UIClient) SendRoomSelection(selection string) {
 	c.conn.Write([]byte(selection + "\n"))
-	
-	c.ui.rooms = c.ui.rooms
-	c.ui.users = []string{c.username}
-	c.ui.g.Update(func(g *gocui.Gui) error {
-		c.ui.updateRoomsView()
-		c.ui.updateUsersView()
-		return nil
-	})
-	
-	go func() {
-		time.Sleep(300 * time.Millisecond)
-		c.conn.Write([]byte("/users\n"))
-		time.Sleep(100 * time.Millisecond)
-		c.conn.Write([]byte("/rooms\n"))
-	}()
+	c.awaitingRoomJoin = true
 }
 
 func (c *UIClient) SendMessage(msg string) {
@@ -70,69 +57,89 @@ func (c *UIClient) reader() {
 	scanner := bufio.NewScanner(c.conn)
 	rooms := []string{}
 	users := []string{}
+	collectingInitialRooms := false
 	collectingRooms := false
 	collectingUsers := false
 
 	for scanner.Scan() {
 		line := scanner.Text()
+		if strings.HasPrefix(line, "Switched to room:") {
+			go c.refreshSidebarViews()
+			c.ui.AddChatMessage(line)
+			continue
+		}
 
-		if strings.Contains(line, "Available rooms:") && strings.Contains(line, "Select room") {
-			for scanner.Scan() {
-				roomLine := scanner.Text()
-				if strings.Contains(roomLine, "Select room") {
-					break
+		if line == "Invalid username" || line == "Chat is full. Try again later." || strings.HasPrefix(line, "You are banned") {
+			c.ui.showUsernameError(line)
+			continue
+		}
+
+		if c.awaitingInitialRoomList {
+			if line == "Available rooms:" {
+				rooms = []string{}
+				collectingInitialRooms = true
+				continue
+			}
+
+			if collectingInitialRooms {
+				if strings.HasPrefix(line, "Select room (enter number):") {
+					c.ui.SetRooms(rooms)
+					c.ui.showRoomSelection()
+					collectingInitialRooms = false
+					c.awaitingInitialRoomList = false
+					continue
 				}
-				if strings.TrimSpace(roomLine) != "" {
-					parts := strings.SplitN(roomLine, ". ", 2)
-					if len(parts) == 2 {
-						roomName := strings.TrimSpace(parts[1])
-						if !strings.Contains(roomName, "[Create new room]") {
-							c.ui.rooms = append(c.ui.rooms, roomName)
-						}
+
+				parts := strings.SplitN(line, ". ", 2)
+				if len(parts) == 2 {
+					roomName := strings.TrimSpace(parts[1])
+					if roomName != "" && !strings.Contains(roomName, "[Create new room]") {
+						rooms = append(rooms, roomName)
 					}
 				}
 			}
-			c.ui.SetRooms(c.ui.rooms)
+
 			continue
+		}
+
+		if c.awaitingRoomJoin {
+			if strings.HasPrefix(line, "Invalid selection") || strings.HasPrefix(line, "Invalid room name") || strings.HasPrefix(line, "Failed to create room") || strings.HasPrefix(line, "Username already taken") {
+				c.awaitingRoomJoin = false
+				c.ui.showRoomError(line)
+				continue
+			}
+
+			c.awaitingRoomJoin = false
+			c.ui.users = []string{c.username}
+			c.ui.showChatLayout()
+			go c.refreshSidebarViews()
 		}
 
 		if line == "Available rooms:" {
 			collectingRooms = true
 			rooms = []string{}
-			c.ui.AddChatMessage(line)
 			continue
 		}
 
 		if collectingRooms {
 			if strings.HasPrefix(line, "  ") && strings.Contains(line, "(") {
-				parts := strings.Fields(line)
-				if len(parts) >= 1 {
-					roomName := strings.TrimSpace(parts[0])
+				trimmed := strings.TrimSpace(line)
+				if idx := strings.LastIndex(trimmed, " ("); idx > 0 {
+					roomName := strings.TrimSpace(trimmed[:idx])
 					rooms = append(rooms, roomName)
-				}
-				c.ui.AddChatMessage(line)
-				go func(r []string) {
-					time.Sleep(50 * time.Millisecond)
-					if collectingRooms {
-						collectingRooms = false
-						c.ui.rooms = r
-						c.ui.UpdateRooms(r)
-					}
-				}(rooms)
-				continue
-			} else {
-				collectingRooms = false
-				if len(rooms) > 0 {
-					c.ui.rooms = rooms
 					c.ui.UpdateRooms(rooms)
 				}
+				continue
 			}
+
+			collectingRooms = false
+			c.ui.UpdateRooms(rooms)
+			// Fall through to process the current line, otherwise room events can be dropped.
 		}
 
 		if line == "All users:" {
 			collectingUsers = true
 			users = []string{}
-			c.ui.AddChatMessage(line)
 			continue
 		}
 
@@ -142,28 +149,43 @@ func (c *UIClient) reader() {
 				if len(parts) == 2 {
 					userList := strings.Split(parts[1], ", ")
 					users = append(users, userList...)
-				}
-				c.ui.AddChatMessage(line)
-				go func(u []string) {
-					time.Sleep(50 * time.Millisecond)
-					if collectingUsers {
-						collectingUsers = false
-						c.ui.UpdateUsers(u)
-					}
-				}(users)
-				continue
-			} else {
-				collectingUsers = false
-				if len(users) > 0 {
 					c.ui.UpdateUsers(users)
 				}
+				continue
 			}
+
+			collectingUsers = false
+			c.ui.UpdateUsers(users)
+			// Fall through to process the current line, otherwise room events can be dropped.
+		}
+
+		if strings.Contains(line, " has joined ") || strings.Contains(line, " has left ") || strings.Contains(line, " changed nickname to ") {
+			go c.refreshUsersView()
 		}
 
 		c.ui.AddChatMessage(line)
 	}
 
+	if collectingRooms {
+		c.ui.UpdateRooms(rooms)
+	}
+	if collectingUsers {
+		c.ui.UpdateUsers(users)
+	}
+
 	if err := scanner.Err(); err != nil {
 		c.ui.AddChatMessage(fmt.Sprintf("Connection error: %v", err))
 	}
+}
+
+func (c *UIClient) refreshSidebarViews() {
+	time.Sleep(100 * time.Millisecond)
+	c.conn.Write([]byte("/users\n"))
+	time.Sleep(100 * time.Millisecond)
+	c.conn.Write([]byte("/rooms\n"))
+}
+
+func (c *UIClient) refreshUsersView() {
+	time.Sleep(60 * time.Millisecond)
+	c.conn.Write([]byte("/users\n"))
 }

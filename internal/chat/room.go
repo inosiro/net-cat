@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"log"
 	"slices"
 	"sync"
 	"time"
@@ -93,6 +94,10 @@ func (r *Room) DisconnectClientFromRoom(username string) bool {
 	if !exists {
 		return false
 	}
+	if !client.SafeClose() {
+		return false
+	}
+	log.Printf("Client %s left room %s\n", username, r.Name)
 	delete(r.Clients, username)
 	close(client.Out)
 	client.Conn.Close()

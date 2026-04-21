@@ -2,6 +2,7 @@ package chat
 
 import (
 	"errors"
+	"log"
 	"net"
 	"slices"
 	"strings"
@@ -38,6 +39,8 @@ type Server struct {
 	BannedIPs map[string]time.Time
 }
 
+var ErrServerFull = errors.New("server is full: maximum clients reached")
+
 // NewServer creates a new server with a default "Main Room".
 func NewServer() *Server {
 	s := &Server{
@@ -60,6 +63,7 @@ func (s *Server) CreateRoom(name string) (*Room, error) {
 	}
 	room := NewRoom(name)
 	s.Rooms[name] = room
+	log.Printf("Room %s created\n", name)
 	return room, nil
 }
 
@@ -87,20 +91,39 @@ func (s *Server) ListRooms() []string {
 
 // RegisterClientInRoom adds a client to a room.
 func (s *Server) RegisterClientInRoom(room *Room, c *Client) error {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+
+	totalClients := 0
+	for _, currentRoom := range s.Rooms {
+		currentRoom.Mu.Lock()
+		totalClients += len(currentRoom.Clients)
+		currentRoom.Mu.Unlock()
+	}
+	if totalClients >= MaxClients {
+		return ErrServerFull
+	}
+
 	room.Mu.Lock()
 	defer room.Mu.Unlock()
 	if _, exists := room.Clients[c.Username]; exists {
 		return errors.New("username already taken in this room: " + c.Username)
 	}
 	room.Clients[c.Username] = c
+	log.Printf("Client %s joined room %s\n", c.Username, room.Name)
 	return nil
 }
 
 // DisconnectClientFromRoom removes a client from a room.
-func (s *Server) DisconnectClientFromRoom(room *Room, username string) {
+func (s *Server) DisconnectClientFromRoom(room *Room, username string) bool {
 	room.Mu.Lock()
 	defer room.Mu.Unlock()
+	if _, exists := room.Clients[username]; !exists {
+		return false
+	}
+	log.Printf("Client %s left room %s\n", username, room.Name)
 	delete(room.Clients, username)
+	return true
 }
 
 // GetTotalUserCount returns total users across all rooms
@@ -127,6 +150,7 @@ func (s *Server) BanIP(addr string) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	ip := strings.Split(addr, ":")[0]
+	log.Print("Ban enforced for IP: ", addr)
 	s.BannedIPs[ip] = time.Now().Add(1 * time.Minute)
 }
 

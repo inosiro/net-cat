@@ -45,14 +45,17 @@ func NewClient(conn net.Conn, reader *bufio.Reader) {
 		log.Fatalf("Failed to send username: %v\n", err)
 	}
 
-	// Read room selection prompt and room list
+	// Read the next server response after sending the username.
 	buf := make([]byte, 4096)
 	n, err := conn.Read(buf)
-	if err != nil {
-		log.Fatalf("Failed to read room list: %v\n", err)
+	if err != nil && n == 0 {
+		log.Fatalf("Failed to read server response: %v\n", err)
 	}
-	roomListText := string(buf[:n])
-	fmt.Print(roomListText)
+	serverResponse := string(buf[:n])
+	fmt.Print(serverResponse)
+	if !strings.Contains(serverResponse, "Select room (enter number):") {
+		return
+	}
 
 	// Get room selection from user
 	selection, err := reader.ReadString('\n')

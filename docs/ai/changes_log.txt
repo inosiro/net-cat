@@ -44,6 +44,110 @@ Git Workflow & File Move:
 
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
 
+Timestamp: 2026-04-21
+User Request: "When a second client enters the same room with the first, the first client does not see the user in the list and the same when changing nickname. BUT If the client executes /users the new user appears."
+
+AI Assistant Output & Actions:
+
+Users Panel Auto-Refresh Fix (Cautious):
+- Identified that UI parser section transitions could swallow non-section lines, causing join/leave announcements to be dropped and delaying downstream refresh behavior.
+- Updated `internal/ui/client.go` to finalize `/rooms` and `/users` sections but continue processing the same current line, preventing event-line loss.
+- Added a users-only refresh trigger in `internal/ui/client.go` for membership/nickname system events (`has joined`, `has left`, `changed nickname to`) by requesting `/users` asynchronously.
+- Kept scope narrow: no room panel behavior changes beyond existing parser fixes.
+
+Validation:
+- Verified no compile diagnostics in `internal/ui/client.go`.
+- Ran tests: 32 passed, 0 failed.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-21
+User Request: "It worked partially, but there is a problem: The new room appears ONLY when the user send a message to the new room."
+
+AI Assistant Output & Actions:
+
+UI Incremental Sidebar Refresh Fix:
+- Confirmed the delayed room visibility issue came from section parsing that waited for a non-room delimiter line before applying updates.
+- Updated `internal/ui/client.go` to apply room list updates incrementally while parsing `/rooms` response lines.
+- Updated `internal/ui/client.go` to apply users list updates incrementally while parsing `/users` response lines for consistent sidebar behavior.
+- Kept the change minimal: no protocol changes, no layout/state-machine rewrites.
+
+Validation:
+- Verified no compile diagnostics in `internal/ui/client.go`.
+- Ran tests: 32 passed, 0 failed.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-21
+User Request: "In the UI mode client, when we switch room the new room is not displayed in the rooms section of the ui. We must fix this with caution."
+
+AI Assistant Output & Actions:
+
+UI Room-Switch Sidebar Fix (Cautious):
+- Added a targeted refresh trigger in `internal/ui/client.go` when the server confirms a successful switch (`Switched to room:`), causing the client to request fresh `/users` and `/rooms` data immediately.
+- Fixed `/rooms` response parsing in `internal/ui/client.go` to preserve full room names that include spaces (for example, `Main Room`) instead of truncating to the first token.
+- Kept failure behavior unchanged: on failed switch, rooms sidebar is not force-refreshed.
+
+Validation:
+- Verified no compile diagnostics in `internal/ui/client.go`.
+- Ran tests: 32 passed, 0 failed.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-21
+User Request: "the ui does not showing the right windows, does not refresh, suggest how to fix it" + "yes"
+
+AI Assistant Output & Actions:
+
+UI Window/Refresh Fix (Cautious):
+- Added a newline terminator to the server room prompt in `internal/chat/network.go` so scanner-based clients can always parse the room-selection boundary.
+- Updated `internal/ui/ui.go` so submitting room selection no longer forces an immediate transition to chat view.
+- Added server-driven layout transitions in `internal/ui/ui.go`:
+  - `showChatLayout()` to move into chat only after join success.
+  - `showRoomError()` to keep room-selection window active and display room-stage errors.
+- Refactored `internal/ui/client.go` parsing logic into deterministic states:
+  - Await initial room list after username.
+  - Await room join result after room selection.
+  - Parse `/rooms` and `/users` responses without timer goroutines.
+- Removed sleep-driven collector race behavior and switched to synchronous section parsing + explicit sidebar refresh requests after successful room join.
+
+Validation:
+- Verified no compile diagnostics in `internal/chat/network.go`, `internal/ui/ui.go`, and `internal/ui/client.go`.
+- Ran tests: 32 passed, 0 failed.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-21
+User Request: "We tried to implement a 10 user restriction but it is notworking. Let's concentrate on that but with caution."
+
+AI Assistant Output & Actions:
+
+Capacity Enforcement Fix:
+- Investigated the 10-user limit and confirmed `MaxClients` existed in `internal/chat/server.go` but was never enforced during client admission.
+- Updated `RegisterClientInRoom()` in `internal/chat/server.go` to enforce a server-wide concurrent client cap under `s.Mu` and return a dedicated `ErrServerFull` error when the cap is reached.
+- Updated `internal/chat/network.go` to translate that error into the user-facing message: `Chat is full. Try again later.` and close the connection cleanly.
+- Replaced the weak room-capacity test in `tests/server_test.go` with an actual limit test that admits 10 clients successfully and rejects the 11th.
+
+Validation:
+- Planned diagnostics and tests immediately after the edit to confirm no regressions.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-21
+User Request: "1. Do it (with caution)"
+
+AI Assistant Output & Actions:
+
+Logging Update:
+- Added a room-creation log entry in `internal/chat/server.go` when `CreateRoom()` succeeds.
+- Added a room-switch log entry in `internal/chat/network.go` after a client successfully moves from one room to another.
+- Kept the change intentionally narrow to avoid altering registration, announcement, or disconnect behavior beyond the existing refactor.
+
+Validation:
+- Planned diagnostics and tests immediately after the edit to confirm no regressions.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
 Timestamp: 2026-04-05
 User Request: "lets start building each task with tdd one by one"
 
@@ -258,6 +362,21 @@ Client Struct Updates:
 
 Documentation Update:
 - Updated task completion status for multi-room implementation
+
+Timestamp: 2026-04-21
+User Request: "OK do it!"
+
+AI Assistant Output & Actions:
+
+Logging & Disconnect Refactor:
+- Investigated why disconnect logging added in `Server.DisconnectClientFromRoom()` was not appearing during normal client exits.
+- Confirmed active disconnect paths were bypassing the server helper and deleting clients directly inside `network.go`, while slow-client eviction used `Room.DisconnectClientFromRoom()`.
+- Updated `internal/chat/server.go` so `DisconnectClientFromRoom()` returns a boolean and logs only when the user is actually present in the room.
+- Updated `internal/chat/network.go` to route `/leave`, room switching, normal EOF disconnect, and spam-disconnect cleanup through the shared server removal helper.
+- Updated `internal/chat/room.go` so slow-client broadcaster eviction also logs the room-leave event and uses `SafeClose()` before closing resources.
+- Verified the refactor with diagnostics and tests: 31 tests passed, 0 failed.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
 
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
 
@@ -554,5 +673,22 @@ Build & Test:
   - Cursor blinks in input field
   - Arrow keys scroll chat history
   - Ctrl+C exits cleanly
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-21
+User Request: "When a user enters a name and adds a space or generally the filename is invalid, the logic returns the messg \"invalid user name\" as intended but the program hangs."
+
+AI Assistant Output & Actions:
+
+Handshake Fix:
+- Investigated the invalid-username flow and confirmed the server responded correctly, but the client still advanced into the room-selection phase after receiving a terminal handshake error.
+- Updated `internal/chat/client.go` so the plain client prints the post-username server response and returns immediately unless the response contains the room-selection prompt.
+- Updated `internal/ui/ui.go` so the UI no longer switches to room-selection immediately after submitting a username; it now waits for the server to actually provide the room list.
+- Updated `internal/ui/client.go` to surface username-stage terminal errors such as `Invalid username`, `Chat is full. Try again later.`, and temporary bans without incorrectly advancing the UI flow.
+- Removed a no-op self-assignment in `internal/ui/client.go` while validating the handshake changes.
+
+Validation:
+- Planned diagnostics and tests immediately after the edit to confirm no regressions.
 
 Log Update: Appended this action to `docs/ai/changes_log.txt`.

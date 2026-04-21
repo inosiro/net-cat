@@ -179,10 +179,10 @@ func (ui *UI) submitUsername(g *gocui.Gui, v *gocui.View) error {
 	}
 	ui.client.username = username
 	ui.client.SendUsername()
-	g.DeleteView("prompt")
-	g.DeleteView("username")
-	ui.g.SetManagerFunc(ui.roomLayout)
-	return ui.setRoomKeybindings()
+	v.Clear()
+	v.SetCursor(0, 0)
+	v.SetOrigin(0, 0)
+	return nil
 }
 
 func (ui *UI) submitRoom(g *gocui.Gui, v *gocui.View) error {
@@ -191,11 +191,43 @@ func (ui *UI) submitRoom(g *gocui.Gui, v *gocui.View) error {
 		return nil
 	}
 	ui.client.SendRoomSelection(selection)
-	g.DeleteView("roomprompt")
-	g.DeleteView("roomlist")
-	g.DeleteView("roomselect")
-	ui.g.SetManagerFunc(ui.chatLayout)
-	return ui.setChatKeybindings()
+	v.Clear()
+	v.SetCursor(0, 0)
+	v.SetOrigin(0, 0)
+	return nil
+}
+
+func (ui *UI) showChatLayout() {
+	ui.g.Update(func(g *gocui.Gui) error {
+		if _, err := g.View("input"); err == nil {
+			return nil
+		}
+		g.DeleteView("roomprompt")
+		g.DeleteView("roomlist")
+		g.DeleteView("roomselect")
+		ui.g.SetManagerFunc(ui.chatLayout)
+		return ui.setChatKeybindings()
+	})
+}
+
+func (ui *UI) showRoomError(message string) {
+	ui.g.Update(func(g *gocui.Gui) error {
+		prompt, err := g.View("roomprompt")
+		if err != nil {
+			return nil
+		}
+		prompt.Clear()
+		fmt.Fprintln(prompt, "Select a room (enter number):")
+		fmt.Fprintln(prompt, message)
+
+		input, err := g.View("roomselect")
+		if err == nil {
+			input.Clear()
+			input.SetCursor(0, 0)
+			input.SetOrigin(0, 0)
+		}
+		return nil
+	})
 }
 
 func (ui *UI) sendMessage(g *gocui.Gui, v *gocui.View) error {
@@ -320,6 +352,36 @@ func (ui *UI) showHelp() {
 		fmt.Fprintln(v, "/leave         - Leave chat and disconnect")
 		fmt.Fprintln(v, "/help          - Show this help message")
 		fmt.Fprintln(v, "=== End Help ===")
+		return nil
+	})
+}
+
+func (ui *UI) showRoomSelection() {
+	ui.g.Update(func(g *gocui.Gui) error {
+		g.DeleteView("prompt")
+		g.DeleteView("username")
+		ui.g.SetManagerFunc(ui.roomLayout)
+		return ui.setRoomKeybindings()
+	})
+}
+
+func (ui *UI) showUsernameError(message string) {
+	ui.g.Update(func(g *gocui.Gui) error {
+		prompt, err := g.View("prompt")
+		if err != nil {
+			return nil
+		}
+		prompt.Clear()
+		fmt.Fprintln(prompt, "Enter your username:")
+		fmt.Fprintln(prompt, message)
+		fmt.Fprintln(prompt, "Restart client to try again.")
+
+		input, err := g.View("username")
+		if err == nil {
+			input.Clear()
+			input.SetCursor(0, 0)
+			input.SetOrigin(0, 0)
+		}
 		return nil
 	})
 }

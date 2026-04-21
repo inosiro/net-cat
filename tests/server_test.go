@@ -31,36 +31,58 @@ func TestNewServer(t *testing.T) {
 	}
 }
 
-// ── Task 2.2: Max Connections per Room ───────────────────────────────────────
+// ── Task 2.2: Max Connections Enforcement ────────────────────────────────────
 
 func TestRoomCapacity(t *testing.T) {
 	s := chat.NewServer()
 	room, _ := s.GetRoom("Main Room")
-
-	// Create multiple clients in the room
-	clients := make([]*chat.Client, 5)
-	for i := 0; i < 5; i++ {
-		serverConn, clientConn := net.Pipe()
-		defer serverConn.Close()
-		defer clientConn.Close()
-
-		c := &chat.Client{
-			Conn:     serverConn,
-			Username: fmt.Sprintf("user%d", i),
-			Out:      make(chan string, 32),
+	connections := make([]net.Conn, 0, chat.MaxClients*2+2)
+	defer func() {
+		for _, conn := range connections {
+			conn.Close()
 		}
-		clients[i] = c
-		room.Mu.Lock()
-		room.Clients[c.Username] = c
-		room.Mu.Unlock()
-	}
+	}()
 
-	t.Run("Clients are in room", func(t *testing.T) {
+	t.Run("Tenth client succeeds", func(t *testing.T) {
+		for i := 0; i < chat.MaxClients; i++ {
+			serverConn, clientConn := net.Pipe()
+			connections = append(connections, serverConn, clientConn)
+
+			c := &chat.Client{
+				Conn:     serverConn,
+				Username: fmt.Sprintf("user%d", i),
+				Out:      make(chan string, 32),
+			}
+
+			if err := s.RegisterClientInRoom(room, c); err != nil {
+				t.Fatalf("Expected client %d to be admitted, got error: %v", i+1, err)
+			}
+		}
+
 		room.Mu.Lock()
 		count := len(room.Clients)
 		room.Mu.Unlock()
-		if count != 5 {
-			t.Errorf("Expected 5 clients in room, got %d", count)
+		if count != chat.MaxClients {
+			t.Fatalf("Expected %d clients in room, got %d", chat.MaxClients, count)
+		}
+	})
+
+	t.Run("Eleventh client is rejected", func(t *testing.T) {
+		serverConn, clientConn := net.Pipe()
+		connections = append(connections, serverConn, clientConn)
+
+		c := &chat.Client{
+			Conn:     serverConn,
+			Username: "user-overflow",
+			Out:      make(chan string, 32),
+		}
+
+		err := s.RegisterClientInRoom(room, c)
+		if err == nil {
+			t.Fatal("Expected 11th client to be rejected")
+		}
+		if err != chat.ErrServerFull {
+			t.Fatalf("Expected ErrServerFull, got %v", err)
 		}
 	})
 
