@@ -69,6 +69,12 @@ func (c *UIClient) reader() {
 			continue
 		}
 
+		if line == "Goodbye!" {
+			c.ui.AddChatMessage(line)
+			c.ui.requestQuit()
+			return
+		}
+
 		if c.awaitingRoomJoin {
 			if line == "Invalid username" || line == "Chat is full. Try again later." || strings.HasPrefix(line, "You are banned") || line == "Username already taken in this room" {
 				c.awaitingRoomJoin = false

@@ -56,6 +56,22 @@ Git Workflow & File Move:
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
 
 Timestamp: 2026-04-23
+User Request: "Now we must address the \"/leave\" command: In UI the client is disconnected (OK), but the UI is still running confusing the user."
+
+AI Assistant Output & Actions:
+
+Bug Fix:
+- Updated `internal/ui/client.go` to detect server line `Goodbye!` and immediately trigger UI shutdown.
+- Added `requestQuit()` helper in `internal/ui/ui.go` that requests `gocui.ErrQuit` through the GUI update loop.
+- Preserved goodbye behavior by printing `Goodbye!` to the chat panel before quitting.
+
+Verification:
+- Checked diagnostics for `internal/ui/client.go` and `internal/ui/ui.go` with no errors reported.
+- Ran `go build .` -> PASS.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
 User Request: "There is a strange behaviour: Sometimes when the client starts he does not see the string: \"[ENTER YOUR NAME]:\", other times it works! It is RANDOM!"
 
 AI Assistant Output & Actions:

@@ -308,6 +308,12 @@ func (ui *UI) showUsernameError(message string) {
 	})
 }
 
+func (ui *UI) requestQuit() {
+	ui.g.Update(func(g *gocui.Gui) error {
+		return gocui.ErrQuit
+	})
+}
+
 func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
