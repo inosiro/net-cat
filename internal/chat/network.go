@@ -332,56 +332,13 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 		Out:      make(chan string, 32),
 	}
 
-	// Show available rooms
-	rooms := s.ListRooms()
-	roomList := "Available rooms:\n"
-	for i, room := range rooms {
-		roomList += fmt.Sprintf("%d. %s\n", i+1, room)
-	}
-	roomList += fmt.Sprintf("%d. [Create new room]\n", len(rooms)+1)
-	roomList += "Select room (enter number):\n"
-	conn.Write([]byte(roomList))
-
-	// Read room selection
-	if !scanner.Scan() {
+	// Get Main Room
+	selectedRoom, err := s.GetRoom("Main Room")
+	if err != nil {
+		// Should never happen since Main Room is created on startup, but handle it just in case
+		conn.Write([]byte("Server error: Main Room not found\n"))
 		conn.Close()
 		return
-	}
-
-	selection := strings.TrimSpace(scanner.Text())
-	var selectedRoom *Room
-	var err error
-
-	if selection == fmt.Sprintf("%d", len(rooms)+1) {
-		// Create new room
-		conn.Write([]byte("Please enter a name for your new room.\n"))
-		if !scanner.Scan() {
-			conn.Close()
-			return
-		}
-		roomName := strings.TrimSpace(scanner.Text())
-		if roomName == "" {
-			conn.Write([]byte("Invalid room name\n"))
-			conn.Close()
-			return
-		}
-		selectedRoom, err = s.CreateRoom(roomName)
-		if err != nil {
-			conn.Write([]byte("Failed to create room: " + err.Error() + "\n"))
-			conn.Close()
-			return
-		}
-		// Start broadcaster for new room
-		go selectedRoom.RoomBroadcaster()
-	} else {
-		// Join existing room
-		roomIndex := 0
-		if _, err := fmt.Sscanf(selection, "%d", &roomIndex); err != nil || roomIndex < 1 || roomIndex > len(rooms) {
-			conn.Write([]byte("Invalid selection\n"))
-			conn.Close()
-			return
-		}
-		selectedRoom = s.Rooms[rooms[roomIndex-1]]
 	}
 
 	// Register client in room

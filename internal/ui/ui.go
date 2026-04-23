@@ -70,34 +70,7 @@ func (ui *UI) usernameLayout(g *gocui.Gui) error {
 	return nil
 }
 
-func (ui *UI) roomLayout(g *gocui.Gui) error {
-	maxX, maxY := g.Size()
-	if v, err := g.SetView("roomprompt", maxX/2-20, maxY/2-10, maxX/2+20, maxY/2-8); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		fmt.Fprintln(v, "Select a room (enter number):")
-	}
-	if v, err := g.SetView("roomlist", maxX/2-20, maxY/2-8, maxX/2+20, maxY/2+2); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Clear()
-		for i, room := range ui.rooms {
-			fmt.Fprintf(v, "%d. %s\n", i+1, room)
-		}
-	}
-	if v, err := g.SetView("roomselect", maxX/2-20, maxY/2+2, maxX/2+20, maxY/2+4); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		v.Editable = true
-		if _, err := g.SetCurrentView("roomselect"); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+
 
 func (ui *UI) chatLayout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
@@ -146,15 +119,7 @@ func (ui *UI) setUsernameKeybindings() error {
 	return nil
 }
 
-func (ui *UI) setRoomKeybindings() error {
-	if err := ui.g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
-		return err
-	}
-	if err := ui.g.SetKeybinding("roomselect", gocui.KeyEnter, gocui.ModNone, ui.submitRoom); err != nil {
-		return err
-	}
-	return nil
-}
+
 
 func (ui *UI) setChatKeybindings() error {
 	if err := ui.g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
@@ -185,50 +150,21 @@ func (ui *UI) submitUsername(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func (ui *UI) submitRoom(g *gocui.Gui, v *gocui.View) error {
-	selection := strings.TrimSpace(v.Buffer())
-	if selection == "" {
-		return nil
-	}
-	ui.client.SendRoomSelection(selection)
-	v.Clear()
-	v.SetCursor(0, 0)
-	v.SetOrigin(0, 0)
-	return nil
-}
+
 
 func (ui *UI) showChatLayout() {
 	ui.g.Update(func(g *gocui.Gui) error {
 		if _, err := g.View("input"); err == nil {
 			return nil
 		}
-		g.DeleteView("roomprompt")
-		g.DeleteView("roomlist")
-		g.DeleteView("roomselect")
+		g.DeleteView("prompt")
+		g.DeleteView("username")
 		ui.g.SetManagerFunc(ui.chatLayout)
 		return ui.setChatKeybindings()
 	})
 }
 
-func (ui *UI) showRoomError(message string) {
-	ui.g.Update(func(g *gocui.Gui) error {
-		prompt, err := g.View("roomprompt")
-		if err != nil {
-			return nil
-		}
-		prompt.Clear()
-		fmt.Fprintln(prompt, "Select a room (enter number):")
-		fmt.Fprintln(prompt, message)
 
-		input, err := g.View("roomselect")
-		if err == nil {
-			input.Clear()
-			input.SetCursor(0, 0)
-			input.SetOrigin(0, 0)
-		}
-		return nil
-	})
-}
 
 func (ui *UI) sendMessage(g *gocui.Gui, v *gocui.View) error {
 	msg := strings.TrimSpace(v.Buffer())
@@ -356,14 +292,7 @@ func (ui *UI) showHelp() {
 	})
 }
 
-func (ui *UI) showRoomSelection() {
-	ui.g.Update(func(g *gocui.Gui) error {
-		g.DeleteView("prompt")
-		g.DeleteView("username")
-		ui.g.SetManagerFunc(ui.roomLayout)
-		return ui.setRoomKeybindings()
-	})
-}
+
 
 func (ui *UI) showUsernameError(message string) {
 	ui.g.Update(func(g *gocui.Gui) error {

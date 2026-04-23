@@ -45,32 +45,6 @@ func NewClient(conn net.Conn, reader *bufio.Reader) {
 		log.Fatalf("Failed to send username: %v\n", err)
 	}
 
-	// Read the next server response after sending the username.
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	if err != nil && n == 0 {
-		log.Fatalf("Failed to read server response: %v\n", err)
-	}
-	serverResponse := string(buf[:n])
-	fmt.Print(serverResponse)
-	if !strings.Contains(serverResponse, "Select room (enter number):") {
-		return
-	}
-
-	// Get room selection from user
-	selection, err := reader.ReadString('\n')
-	if err != nil {
-		log.Fatalf("Failed to read room selection: %v\n", err)
-	}
-
-	selection = strings.TrimRight(selection, "\r\n")
-
-	// Send room selection
-	_, err = conn.Write([]byte(selection + "\n"))
-	if err != nil {
-		log.Fatalf("Failed to send room selection: %v\n", err)
-	}
-
 	// Now start concurrent reader and writer for ongoing chat
 	go session.clientReader()
 	session.clientWriter()

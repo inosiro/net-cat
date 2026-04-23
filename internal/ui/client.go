@@ -11,7 +11,6 @@ type UIClient struct {
 	conn                    net.Conn
 	username                string
 	ui                      *UI
-	awaitingInitialRoomList bool
 	awaitingRoomJoin        bool
 }
 
@@ -40,12 +39,11 @@ func NewUIClient(addr string, ui *UI) (*UIClient, error) {
 
 func (c *UIClient) SendUsername() {
 	c.conn.Write([]byte(c.username + "\n"))
-	c.awaitingInitialRoomList = true
+	c.awaitingRoomJoin = true
 }
 
 func (c *UIClient) SendRoomSelection(selection string) {
 	c.conn.Write([]byte(selection + "\n"))
-	c.awaitingRoomJoin = true
 }
 
 func (c *UIClient) SendMessage(msg string) {
@@ -56,7 +54,6 @@ func (c *UIClient) reader() {
 	scanner := bufio.NewScanner(c.conn)
 	rooms := []string{}
 	users := []string{}
-	collectingInitialRooms := false
 	collectingRooms := false
 	collectingUsers := false
 
@@ -72,41 +69,14 @@ func (c *UIClient) reader() {
 			continue
 		}
 
-		if c.awaitingInitialRoomList {
-			if line == "Available rooms:" {
-				rooms = []string{}
-				collectingInitialRooms = true
-				continue
-			}
-
-			if collectingInitialRooms {
-				if strings.HasPrefix(line, "Select room (enter number):") {
-					c.ui.SetRooms(rooms)
-					c.ui.showRoomSelection()
-					collectingInitialRooms = false
-					c.awaitingInitialRoomList = false
-					continue
-				}
-
-				parts := strings.SplitN(line, ". ", 2)
-				if len(parts) == 2 {
-					roomName := strings.TrimSpace(parts[1])
-					if roomName != "" && !strings.Contains(roomName, "[Create new room]") {
-						rooms = append(rooms, roomName)
-					}
-				}
-			}
-
-			continue
-		}
-
 		if c.awaitingRoomJoin {
-			if strings.HasPrefix(line, "Invalid selection") || strings.HasPrefix(line, "Invalid room name") || strings.HasPrefix(line, "Failed to create room") || strings.HasPrefix(line, "Username already taken") {
+			if line == "Invalid username" || line == "Chat is full. Try again later." || strings.HasPrefix(line, "You are banned") || line == "Username already taken in this room" {
 				c.awaitingRoomJoin = false
-				c.ui.showRoomError(line)
+				c.ui.showUsernameError(line)
 				continue
 			}
 
+			// First non-error message indicates successful join
 			c.awaitingRoomJoin = false
 			c.ui.users = []string{c.username}
 			c.ui.showChatLayout()
