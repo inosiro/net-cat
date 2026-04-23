@@ -34,7 +34,7 @@ func (c *Client) disconnect(s *Server, announceLeave bool) {
 	logConnectionDisconnected(c.Conn)
 	close(c.Out)
 	c.Conn.Close()
-	log.Printf("Client %s disconnected.\n", c.Username)
+	log.Printf("%s disconnected.\n", c.Username)
 	if announceLeave {
 		s.AnnounceLeave(c.currentRoom, c.Username)
 	}
@@ -184,7 +184,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 
 			// Update current room reference
 			c.currentRoom = newRoom
-			log.Printf("Client %s switched room from %s to %s\n", c.Username, oldRoom.Name, newRoom.Name)
+			log.Printf("%s switched room from %s to %s\n", c.Username, oldRoom.Name, newRoom.Name)
 
 			// Announce leave from old room
 			oldRoom.Messages <- ChatMessage{
@@ -365,7 +365,7 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 		conn.Close()
 		return
 	}
-	log.Printf("Client %s connected.\n", c.Username)
+	log.Printf("%s connected.\n", c.Username)
 
 	// Send room history
 	selectedRoom.SendHistory(c)

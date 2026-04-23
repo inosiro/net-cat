@@ -890,3 +890,18 @@ Design Rationale:
 - UI: Logo and help appear only after chat window opens (after room join), not during handshake, to keep handshake UI clean
 
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
+User Request: "OK It worked. Now address this bug: ALL the server log messages have this structure: \"2026/04/23 21:37:55 Client test22 left room Main Room\". We want this structure: \"2026/04/23 21:37:55 test22 left room Main Room\" (The word \"client\" must be ommited in every message string)."
+
+AI Assistant Output & Actions:
+
+Bug Fix:
+- Searched server log calls in `internal/chat/**/*.go` and identified 6 log strings prefixed with `Client`.
+- Updated log strings in `internal/chat/network.go`, `internal/chat/room.go`, and `internal/chat/server.go` to remove the word `Client` while preserving the rest of each message.
+- Updated messages include: connected, disconnected, joined room, left room, and switched room.
+
+Verification:
+- Checked diagnostics for `internal/chat/network.go`, `internal/chat/room.go`, and `internal/chat/server.go` with no errors reported.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
