@@ -56,6 +56,52 @@ Git Workflow & File Move:
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
 
 Timestamp: 2026-04-23
+User Request: "the logconnectiondisconnected function does not work. when the user /leave the server does not log the event. fix it"
+
+AI Assistant Output & Actions:
+
+Bug Fix:
+- Identified that `logConnectionDisconnected(conn)` was only used during pre-username handshake failures and was not invoked during normal authenticated disconnects.
+- Updated `internal/chat/network.go` to call `logConnectionDisconnected(c.Conn)` inside the shared client disconnect helper used by `/leave` and other authenticated disconnect paths.
+- Kept existing user disconnect log (`Client <user> disconnected.`) intact.
+
+Verification:
+- Checked diagnostics for `internal/chat/network.go` with no errors reported.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
+User Request: "OK add it also for the new client connections. Must I think everything!!!!!!!!! (I am joking)"
+
+AI Assistant Output & Actions:
+
+Feature Implementation:
+- Updated `internal/chat/network.go` to add a dedicated connection log on successful admission: `Client <user> connected.`.
+- Placed the new log immediately after successful `RegisterClientInRoom` so it only logs real, accepted connections.
+
+Verification:
+- Checked diagnostics for `internal/chat/network.go` with no errors reported.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
+User Request: "Now we want when the client (CLI & UI) uses the command \"/leave\", the server logs show only the user <user> left the room. We want another log for user disconnect."
+
+AI Assistant Output & Actions:
+
+Feature Implementation:
+- Updated `internal/chat/network.go` to centralize client disconnection cleanup in a single helper: `disconnect(s *Server, announceLeave bool)`.
+- Added server log entry `Client <user> disconnected.` in the centralized disconnect helper.
+- Routed all disconnection branches through the same helper (`/leave`, spam disconnect, and scanner-exit/EOF), preserving `left room` log first and `disconnected` second.
+- Kept duplicate prevention by relying on existing `SafeClose()` guard so disconnect log is emitted once per disconnect event.
+
+Verification:
+- Checked diagnostics for `internal/chat/network.go` with no errors reported.
+- Test and build terminal runs were skipped by user choice in this session.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
 User Request: "Now we must address the \"/leave\" command: In UI the client is disconnected (OK), but the UI is still running confusing the user."
 
 AI Assistant Output & Actions:

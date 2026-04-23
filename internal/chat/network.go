@@ -29,6 +29,21 @@ func (c *Client) Writer() {
 	}
 }
 
+func (c *Client) disconnect(s *Server, announceLeave bool) {
+	s.DisconnectClientFromRoom(c.currentRoom, c.Username)
+	logConnectionDisconnected(c.Conn)
+	close(c.Out)
+	c.Conn.Close()
+	log.Printf("Client %s disconnected.\n", c.Username)
+	if announceLeave {
+		s.AnnounceLeave(c.currentRoom, c.Username)
+	}
+}
+
+func logConnectionDisconnected(conn net.Conn) {
+	log.Printf("Connection from %s disconnected.\n", conn.RemoteAddr().String())
+}
+
 // Reader reads incoming lines from the client's TCP connection.
 func (c *Client) Reader(room *Room, s *Server) {
 	c.currentRoom = room
@@ -46,13 +61,8 @@ func (c *Client) Reader(room *Room, s *Server) {
 
 			// Properly clean up the client
 			if c.SafeClose() {
-				s.DisconnectClientFromRoom(c.currentRoom, c.Username)
-				close(c.Out)
-
-				s.AnnounceLeave(c.currentRoom, c.Username)
+				c.disconnect(s, true)
 			}
-
-			c.Conn.Close()
 			return
 		}
 
@@ -259,11 +269,8 @@ func (c *Client) Reader(room *Room, s *Server) {
 				c.Conn.Write([]byte("You have been disconnected for spamming.\n"))
 				s.BanIP(c.Conn.RemoteAddr().String())
 				if c.SafeClose() {
-					s.DisconnectClientFromRoom(c.currentRoom, c.Username)
-					close(c.Out)
-					s.AnnounceLeave(c.currentRoom, c.Username)
+					c.disconnect(s, true)
 				}
-				c.Conn.Close()
 				return
 			}
 			c.mu.Unlock()
@@ -285,12 +292,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 		return
 	}
 
-	s.DisconnectClientFromRoom(c.currentRoom, c.Username)
-	close(c.Out)
-
-	c.Conn.Close()
-
-	s.AnnounceLeave(c.currentRoom, c.Username)
+	c.disconnect(s, true)
 }
 
 // AcceptLoop accepts incoming connections continuously.
@@ -306,8 +308,11 @@ func (s *Server) AcceptLoop(ln net.Listener) {
 }
 
 func (s *Server) handleNewConnection(conn net.Conn) {
+	log.Printf("Incoming connection from %s\n", conn.RemoteAddr().String())
+
 	if s.IsIPBanned(conn.RemoteAddr().String()) {
 		conn.Write([]byte("You are banned from this server for 1 minute.\n"))
+		logConnectionDisconnected(conn)
 		conn.Close()
 		return
 	}
@@ -318,6 +323,7 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 
 	scanner := bufio.NewScanner(conn)
 	if !scanner.Scan() {
+		logConnectionDisconnected(conn)
 		conn.Close()
 		return
 	}
@@ -325,6 +331,7 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 	name := strings.TrimRight(scanner.Text(), "\r\n")
 	if !ValidateUsername(name) {
 		conn.Write([]byte("Invalid username\n"))
+		logConnectionDisconnected(conn)
 		conn.Close()
 		return
 	}
@@ -340,6 +347,7 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 	if err != nil {
 		// Should never happen since Main Room is created on startup, but handle it just in case
 		conn.Write([]byte("Server error: Main Room not found\n"))
+		logConnectionDisconnected(conn)
 		conn.Close()
 		return
 	}
@@ -348,13 +356,16 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 	if err := s.RegisterClientInRoom(selectedRoom, c); err != nil {
 		if errors.Is(err, ErrServerFull) {
 			conn.Write([]byte("Chat is full. Try again later.\n"))
+			logConnectionDisconnected(conn)
 			conn.Close()
 			return
 		}
 		conn.Write([]byte("Username already taken in this room\n"))
+		logConnectionDisconnected(conn)
 		conn.Close()
 		return
 	}
+	log.Printf("Client %s connected.\n", c.Username)
 
 	// Send room history
 	selectedRoom.SendHistory(c)
