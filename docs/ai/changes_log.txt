@@ -56,6 +56,86 @@ Git Workflow & File Move:
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
 
 Timestamp: 2026-04-23
+User Request: "There is a strange behaviour: Sometimes when the client starts he does not see the string: \"[ENTER YOUR NAME]:\", other times it works! It is RANDOM!"
+
+AI Assistant Output & Actions:
+
+Bug Fix:
+- Investigated startup prompt race in CLI mode and identified non-deterministic TCP chunking as the cause: client read the banner only once and could miss the prompt suffix.
+- Updated `main.go` to read startup data from the socket until `[ENTER YOUR NAME]:` is received (`readStartupBanner`).
+- Added a defensive fallback in `main.go` to print `[ENTER YOUR NAME]:` if the received startup data still does not contain it.
+- Added `namePrompt` constant in `main.go` for a single source of truth in startup prompt detection.
+
+Verification:
+- Checked diagnostics for `main.go` with no errors reported.
+- Ran `go test ./tests -v` -> PASS.
+- Ran `go build .` -> PASS.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
+User Request: "Everything is OK, except in the UI only the \"use /help for commands.\" and no logo. Ask me questions."
+
+AI Assistant Output & Actions:
+
+Bug Fix:
+- Investigated why the UI showed the help line but not the multi-line tuc logo after chat layout opened.
+- Updated `internal/ui/ui.go` in `chatLayout()` to render all existing `ui.chatHistory` entries when the `chat` view is first created.
+- This ensures multi-line messages queued before the chat view exists (including the tuc logo) are displayed once the chat panel is initialized.
+
+Verification:
+- Checked diagnostics for `internal/ui/ui.go` with no errors reported.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
+User Request: "When a client starts the program presents the \"tuc\" figure because it is imperative from the exercise. We want the same \"tuc\" to be presented also at the ui client. Also we want to add the line: \"Use /help for commands\" upon client starts ui & CLI. Ask me questions."
+
+AI Assistant Output & Actions:
+
+Feature Implementation:
+- Updated `internal/chat/network.go` to preserve the CLI startup flow while separating the tuc banner from the username prompt internally.
+- Updated CLI startup output order in `internal/chat/network.go` to: tuc figure, `Use /help for commands.`, then `[ENTER YOUR NAME]:`.
+- Updated `internal/ui/client.go` so after the chat layout opens successfully, the UI chat panel displays the same tuc figure followed by `Use /help for commands.`.
+- Kept the change narrow to startup presentation only; no protocol, room, or broadcaster behavior was changed.
+
+Verification:
+- Checked diagnostics for `internal/chat/network.go` and `internal/ui/client.go` with no errors reported.
+- Test run was not executed because the run-tests tool was skipped.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
+User Request: "revert the changes."
+
+AI Assistant Output & Actions:
+
+Revert:
+- Reverted the recent CLI startup banner/help changes in `internal/chat/network.go` by restoring the original `logo` constant and removing the extra `Use /help for commands.` output.
+- Reverted the recent UI startup banner/help changes in `internal/ui/client.go` by removing the chat-panel logo/help injection after room join.
+- Kept unrelated room-update and broadcaster changes intact.
+
+Verification:
+- Checked diagnostics for `internal/chat/network.go` and `internal/ui/client.go` with no errors reported.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
+User Request: "I see this command, but I do not see it when I run the client."
+
+AI Assistant Output & Actions:
+
+Bug Fix:
+- Investigated the CLI startup banner flow in `internal/chat/network.go` and found the help line was being written after a `logo` constant that already contained `[ENTER YOUR NAME]:`, causing the output order to be wrong.
+- Split the banner into `logo` and `namePrompt` constants in `internal/chat/network.go`.
+- Updated connection startup writes to send the CLI output in this order: logo, `Use /help for commands.`, then `[ENTER YOUR NAME]:`.
+
+Verification:
+- Checked diagnostics for `internal/chat/network.go` with no errors reported.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
 User Request: "I want to ommit the 2 indirect packages, suggest solution and ask questions. (Read instructions.md first)"
 
 AI Assistant Output & Actions:
@@ -724,5 +804,27 @@ Handshake Fix:
 
 Validation:
 - Planned diagnostics and tests immediately after the edit to confirm no regressions.
+
+Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
+User Request: "When a client starts the program presents the 'tuc' figure because it is imperative from the exercise. We want the same 'tuc' to be presented also at the ui client. Also we want to add the line: 'Use /help for commands' upon client starts ui & CLI."
+
+AI Assistant Output & Actions:
+
+Feature Implementation - Logo & Help Message Display:
+- Added help line after logo in CLI handshake in `internal/chat/network.go` after `conn.Write([]byte(logo))` to send `"Use /help for commands.\n"`
+- Modified `internal/ui/client.go` to inject the logo and help message as chat messages after successful room join (after `c.ui.showChatLayout()`)
+- Logo is now displayed in the UI chat panel only after the user joins a room (different timing than CLI which shows it before username prompt)
+- Help line immediately follows the logo in both CLI and UI flows
+
+Build & Test Verification:
+- Ran `go build -o ./TCPChat .` → successful compilation
+- Ran `go test ./tests -v` → all 16 tests PASS (broadcaster, announcements, fan-out, safe-close, formatting, server, client registration, username validation)
+- No regressions detected
+
+Design Rationale:
+- CLI: Logo and help appear immediately upon connection, before username entry (existing behavior + help line added)
+- UI: Logo and help appear only after chat window opens (after room join), not during handshake, to keep handshake UI clean
 
 Log Update: Appended this action to `docs/ai/changes_log.txt`.

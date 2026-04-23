@@ -9,7 +9,10 @@ import (
 	"netcat/internal/chat"
 	"netcat/internal/ui"
 	"os"
+	"strings"
 )
+
+const namePrompt = "[ENTER YOUR NAME]:"
 
 func main() {
 	// ui and address flag for client mode
@@ -75,14 +78,35 @@ func main() {
 			fmt.Println("[*] Connected to server")
 			reader := bufio.NewReader(os.Stdin)
 
-			buf := make([]byte, 4096)
-			n, err := conn.Read(buf)
+			banner, err := readStartupBanner(conn)
 			if err != nil {
 				log.Fatalf("Failed to read banner: %v\n", err)
 			}
-			fmt.Print(string(buf[:n]))
+			fmt.Print(banner)
+			if !strings.Contains(banner, namePrompt) {
+				// Fallback safety: always show prompt before reading username input.
+				fmt.Print(namePrompt)
+			}
 			chat.NewClient(conn, reader)
 			return
+		}
+	}
+}
+
+func readStartupBanner(conn net.Conn) (string, error) {
+	buf := make([]byte, 1024)
+	var b strings.Builder
+
+	for {
+		n, err := conn.Read(buf)
+		if n > 0 {
+			b.Write(buf[:n])
+			if strings.Contains(b.String(), namePrompt) {
+				return b.String(), nil
+			}
+		}
+		if err != nil {
+			return b.String(), err
 		}
 	}
 }

@@ -70,8 +70,6 @@ func (ui *UI) usernameLayout(g *gocui.Gui) error {
 	return nil
 }
 
-
-
 func (ui *UI) chatLayout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
 	if v, err := g.SetView("rooms", 0, 0, 20, maxY/2-1); err != nil {
@@ -95,6 +93,9 @@ func (ui *UI) chatLayout(g *gocui.Gui) error {
 		v.Title = "Chat"
 		v.Autoscroll = true
 		v.Wrap = true
+		for _, msg := range ui.chatHistory {
+			fmt.Fprintln(v, msg)
+		}
 	}
 	if v, err := g.SetView("input", 21, maxY-3, maxX-1, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -118,8 +119,6 @@ func (ui *UI) setUsernameKeybindings() error {
 	}
 	return nil
 }
-
-
 
 func (ui *UI) setChatKeybindings() error {
 	if err := ui.g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
@@ -150,8 +149,6 @@ func (ui *UI) submitUsername(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-
-
 func (ui *UI) showChatLayout() {
 	ui.g.Update(func(g *gocui.Gui) error {
 		if _, err := g.View("input"); err == nil {
@@ -163,8 +160,6 @@ func (ui *UI) showChatLayout() {
 		return ui.setChatKeybindings()
 	})
 }
-
-
 
 func (ui *UI) sendMessage(g *gocui.Gui, v *gocui.View) error {
 	msg := strings.TrimSpace(v.Buffer())
@@ -291,8 +286,6 @@ func (ui *UI) showHelp() {
 		return nil
 	})
 }
-
-
 
 func (ui *UI) showUsernameError(message string) {
 	ui.g.Update(func(g *gocui.Gui) error {

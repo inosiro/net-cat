@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	logo            = "Welcome to TCP-Chat!\n         _nnnn_\n        dGGGGMMb\n       @p~qp~~qMb\n       M|@||@) M|\n       @,----.JM|\n      JS^\\__/  qKL\n     dZP        qKRb\n    dZP          qKKb\n   fZP            SMMb\n   HZM            MMMM\n   FqM            MMMM\n __| \".        |\\dS\"qML\n |    `.       | `' \\Zq\n_)      \\.___.,|     .'\n\\____   )MMMMMP|   .'\n     `-'       `--'\n[ENTER YOUR NAME]:"
+	logo            = "Welcome to TCP-Chat!\n         _nnnn_\n        dGGGGMMb\n       @p~qp~~qMb\n       M|@||@) M|\n       @,----.JM|\n      JS^\\__/  qKL\n     dZP        qKRb\n    dZP          qKKb\n   fZP            SMMb\n   HZM            MMMM\n   FqM            MMMM\n __| \".        |\\dS\"qML\n |    `.       | `' \\Zq\n_)      \\.___.,|     .'\n\\____   )MMMMMP|   .'\n     `-'       `--'"
+	namePrompt      = "[ENTER YOUR NAME]:"
 	MaxMessageSize  = 128
 	MessageCooldown = 1 * time.Second
 	MaxSpamAttempts = 5
@@ -311,7 +312,9 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 		return
 	}
 
-	conn.Write([]byte(logo))
+	conn.Write([]byte(logo + "\n"))
+	conn.Write([]byte("Use /help for commands.\n"))
+	conn.Write([]byte(namePrompt))
 
 	scanner := bufio.NewScanner(conn)
 	if !scanner.Scan() {

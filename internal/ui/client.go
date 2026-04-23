@@ -80,6 +80,9 @@ func (c *UIClient) reader() {
 			c.awaitingRoomJoin = false
 			c.ui.users = []string{c.username}
 			c.ui.showChatLayout()
+			const uiLogo = "Welcome to TCP-Chat!\n         _nnnn_\n        dGGGGMMb\n       @p~qp~~qMb\n       M|@||@) M|\n       @,----.JM|\n      JS^\\__/  qKL\n     dZP        qKRb\n    dZP          qKKb\n   fZP            SMMb\n   HZM            MMMM\n   FqM            MMMM\n __| \".        |\\dS\"qML\n |    `.       | `' \\Zq\n_)      \\.___.,|     .'\n\\____   )MMMMMP|   .'\n     `-'       `--'"
+			c.ui.AddChatMessage(uiLogo)
+			c.ui.AddChatMessage("Use /help for commands.")
 		}
 
 		if line == "Available rooms:" {
