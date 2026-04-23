@@ -389,7 +389,7 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 
 // ListenAndServe starts the TCP listener on the given port.
 func (s *Server) ListenAndServe(port string) error {
-	ln, err := net.Listen("tcp", ":"+port)
+	ln, err := net.Listen("tcp4", ":"+port)
 	if err != nil {
 		return err
 	}

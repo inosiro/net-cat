@@ -10,6 +10,17 @@ Documentation Update:
 
 Log Update: Appended this action to `changes_log.txt`.
 
+Timestamp: 2026-04-23
+User Request: "We will keep it like this for now."
+
+AI Assistant Output & Actions:
+
+Decision Confirmation:
+- Confirmed no dependency changes will be made at this time.
+- Kept current module state unchanged, including indirect transitive dependencies.
+
+Log Update: Appended this action to `changes_log.txt`.
+
 Timestamp: 2026-04-05
 User Request: "can you read @[implementation_draft_v1.1.md] and divide it into tasks following a test driven development?"
 
@@ -43,6 +54,29 @@ Git Workflow & File Move:
 - Updated `.instructions.md` with the new paths for `project-context.md` and `changes_log.txt`.
 
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-04-23
+User Request: "I want to ommit the 2 indirect packages, suggest solution and ask questions. (Read instructions.md first)"
+
+AI Assistant Output & Actions:
+
+Dependency Analysis:
+- Read `.instructions.md` first and followed its workflow requirements.
+- Read `go.mod` and confirmed indirect modules listed: `github.com/mattn/go-runewidth` and `github.com/nsf/termbox-go`.
+- Ran `go mod why -m github.com/mattn/go-runewidth` and `go mod why -m github.com/nsf/termbox-go` and confirmed both are required through `github.com/jroimartin/gocui` used by `netcat/internal/ui`.
+- Ran `go mod graph | grep -E 'gocui|go-runewidth|termbox-go'` to verify graph edges: `netcat -> gocui`, `netcat -> termbox-go`, `netcat -> go-runewidth`, and `gocui -> termbox-go -> go-runewidth`.
+
+Clarification Questions:
+- Asked whether goal is hiding indirect lines vs fully eliminating the modules.
+- Asked whether replacing `gocui` is allowed.
+- Asked acceptable risk level.
+- Received answers: eliminate modules entirely, keep `gocui`, and low-risk changes.
+
+Conclusion:
+- Determined that with `gocui` kept and low-risk scope, full elimination of these two modules is not feasible because they are required transitive dependencies.
+- Prepared recommendations and follow-up decision points for next step.
+
+Log Update: Appended this action to `changes_log.txt`.
 
 Timestamp: 2026-04-21
 User Request: "When a second client enters the same room with the first, the first client does not see the user in the list and the same when changing nickname. BUT If the client executes /users the new user appears."
