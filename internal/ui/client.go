@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"time"
 )
 
 type UIClient struct {
@@ -64,7 +63,6 @@ func (c *UIClient) reader() {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "Switched to room:") {
-			go c.refreshSidebarViews()
 			c.ui.AddChatMessage(line)
 			continue
 		}
@@ -112,7 +110,6 @@ func (c *UIClient) reader() {
 			c.awaitingRoomJoin = false
 			c.ui.users = []string{c.username}
 			c.ui.showChatLayout()
-			go c.refreshSidebarViews()
 		}
 
 		if line == "Available rooms:" {
@@ -159,9 +156,8 @@ func (c *UIClient) reader() {
 			// Fall through to process the current line, otherwise room events can be dropped.
 		}
 
-		if strings.Contains(line, " has joined ") || strings.Contains(line, " has left ") || strings.Contains(line, " changed nickname to ") {
-			go c.refreshUsersView()
-		}
+		// System messages about joining/leaving are now handled by broadcaster
+
 
 		c.ui.AddChatMessage(line)
 	}
@@ -178,14 +174,4 @@ func (c *UIClient) reader() {
 	}
 }
 
-func (c *UIClient) refreshSidebarViews() {
-	time.Sleep(100 * time.Millisecond)
-	c.conn.Write([]byte("/users\n"))
-	time.Sleep(100 * time.Millisecond)
-	c.conn.Write([]byte("/rooms\n"))
-}
 
-func (c *UIClient) refreshUsersView() {
-	time.Sleep(60 * time.Millisecond)
-	c.conn.Write([]byte("/users\n"))
-}

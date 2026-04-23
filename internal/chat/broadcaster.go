@@ -2,26 +2,52 @@ package chat
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
 // RoomBroadcaster is the central loop for a room that distributes messages to all clients
 // in that room and appends them to the room's history. Must be run as a goroutine.
 func (r *Room) RoomBroadcaster() {
-	for msg := range r.Messages {
-		formatted := msg.FormatMessage()
-
-		r.Mu.Lock()
-		for _, c := range r.Clients {
-			select {
-			case c.Out <- formatted:
-			default:
-				// Slow / dead client — disconnect asynchronously so we don't block
-				go r.DisconnectClientFromRoom(c.Username)
+	for {
+		select {
+		case msg, ok := <-r.Messages:
+			if !ok {
+				return
 			}
+			formatted := msg.FormatMessage()
+
+			r.Mu.Lock()
+			for _, c := range r.Clients {
+				select {
+				case c.Out <- formatted:
+				default:
+					// Slow / dead client — disconnect asynchronously so we don't block
+					go r.DisconnectClientFromRoom(c.Username)
+				}
+			}
+			r.History = append(r.History, msg)
+			r.Mu.Unlock()
+		case <-r.UserUpdates:
+			r.Mu.Lock()
+			var clients []string
+			for _, c := range r.Clients {
+				clients = append(clients, c.Username)
+			}
+			var msg string
+			if len(clients) > 0 {
+				msg = fmt.Sprintf("All users:\n  [%s]: %s", r.Name, strings.Join(clients, ", "))
+			} else {
+				msg = "All users:\n"
+			}
+			for _, c := range r.Clients {
+				select {
+				case c.Out <- msg:
+				default:
+				}
+			}
+			r.Mu.Unlock()
 		}
-		r.History = append(r.History, msg)
-		r.Mu.Unlock()
 	}
 }
 

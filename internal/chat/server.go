@@ -2,6 +2,7 @@ package chat
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"slices"
@@ -34,9 +35,10 @@ func (c *Client) SafeClose() bool {
 }
 
 type Server struct {
-	Rooms     map[string]*Room
-	Mu        sync.Mutex
-	BannedIPs map[string]time.Time
+	Rooms       map[string]*Room
+	Mu          sync.Mutex
+	BannedIPs   map[string]time.Time
+	RoomUpdates chan struct{}
 }
 
 var ErrServerFull = errors.New("server is full: maximum clients reached")
@@ -44,11 +46,40 @@ var ErrServerFull = errors.New("server is full: maximum clients reached")
 // NewServer creates a new server with a default "Main Room".
 func NewServer() *Server {
 	s := &Server{
-		Rooms:     make(map[string]*Room),
-		BannedIPs: make(map[string]time.Time),
+		Rooms:       make(map[string]*Room),
+		BannedIPs:   make(map[string]time.Time),
+		RoomUpdates: make(chan struct{}, 10),
 	}
 	s.Rooms["Main Room"] = NewRoom("Main Room")
+	go s.ServerBroadcaster()
 	return s
+}
+
+// ServerBroadcaster listens for room updates and broadcasts the available rooms to all clients.
+func (s *Server) ServerBroadcaster() {
+	for range s.RoomUpdates {
+		rooms := s.ListRooms()
+		var lines []string
+		lines = append(lines, "Available rooms:")
+		for _, roomName := range rooms {
+			room, _ := s.GetRoom(roomName)
+			lines = append(lines, fmt.Sprintf("  %s (%d users)", roomName, room.ClientCount()))
+		}
+		msg := strings.Join(lines, "\n")
+
+		s.Mu.Lock()
+		for _, room := range s.Rooms {
+			room.Mu.Lock()
+			for _, c := range room.Clients {
+				select {
+				case c.Out <- msg:
+				default:
+				}
+			}
+			room.Mu.Unlock()
+		}
+		s.Mu.Unlock()
+	}
 }
 
 // CreateRoom creates a new room if it doesn't exist.
@@ -64,6 +95,12 @@ func (s *Server) CreateRoom(name string) (*Room, error) {
 	room := NewRoom(name)
 	s.Rooms[name] = room
 	log.Printf("Room %s created\n", name)
+
+	select {
+	case s.RoomUpdates <- struct{}{}:
+	default:
+	}
+
 	return room, nil
 }
 
@@ -111,6 +148,16 @@ func (s *Server) RegisterClientInRoom(room *Room, c *Client) error {
 	}
 	room.Clients[c.Username] = c
 	log.Printf("Client %s joined room %s\n", c.Username, room.Name)
+
+	select {
+	case s.RoomUpdates <- struct{}{}:
+	default:
+	}
+	select {
+	case room.UserUpdates <- struct{}{}:
+	default:
+	}
+
 	return nil
 }
 
@@ -123,6 +170,16 @@ func (s *Server) DisconnectClientFromRoom(room *Room, username string) bool {
 	}
 	log.Printf("Client %s left room %s\n", username, room.Name)
 	delete(room.Clients, username)
+
+	select {
+	case s.RoomUpdates <- struct{}{}:
+	default:
+	}
+	select {
+	case room.UserUpdates <- struct{}{}:
+	default:
+	}
+
 	return true
 }
 

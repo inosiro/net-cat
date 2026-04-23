@@ -10,19 +10,21 @@ import (
 const MaxRooms = 256
 
 type Room struct {
-	Name     string
-	Clients  map[string]*Client
-	Messages chan ChatMessage
-	History  []ChatMessage
-	Mu       sync.Mutex
+	Name        string
+	Clients     map[string]*Client
+	Messages    chan ChatMessage
+	History     []ChatMessage
+	Mu          sync.Mutex
+	UserUpdates chan struct{}
 }
 
 // NewRoom creates a new room with the given name.
 func NewRoom(name string) *Room {
 	return &Room{
-		Name:     name,
-		Clients:  make(map[string]*Client),
-		Messages: make(chan ChatMessage, 128),
+		Name:        name,
+		Clients:     make(map[string]*Client),
+		Messages:    make(chan ChatMessage, 128),
+		UserUpdates: make(chan struct{}, 10),
 	}
 }
 

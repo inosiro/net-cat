@@ -107,13 +107,9 @@ func (c *Client) Reader(room *Room, s *Server) {
 		// Handle /users command
 		if text == "/users" {
 			c.Out <- "All users:"
-			rooms := s.ListRooms()
-			for _, roomName := range rooms {
-				room, _ := s.GetRoom(roomName)
-				clients := room.GetClients()
-				if len(clients) > 0 {
-					c.Out <- fmt.Sprintf("  [%s]: %s", roomName, strings.Join(clients, ", "))
-				}
+			clients := c.currentRoom.GetClients()
+			if len(clients) > 0 {
+				c.Out <- fmt.Sprintf("  [%s]: %s", c.currentRoom.Name, strings.Join(clients, ", "))
 			}
 			continue
 		}
@@ -151,10 +147,29 @@ func (c *Client) Reader(room *Room, s *Server) {
 				oldRoom.Mu.Lock()
 				oldRoom.Clients[c.Username] = c
 				oldRoom.Mu.Unlock()
+
+				select {
+				case s.RoomUpdates <- struct{}{}:
+				default:
+				}
+				select {
+				case oldRoom.UserUpdates <- struct{}{}:
+				default:
+				}
+
 				continue
 			}
 			newRoom.Clients[c.Username] = c
 			newRoom.Mu.Unlock()
+
+			select {
+			case s.RoomUpdates <- struct{}{}:
+			default:
+			}
+			select {
+			case newRoom.UserUpdates <- struct{}{}:
+			default:
+			}
 
 			// Update current room reference
 			c.currentRoom = newRoom
@@ -202,6 +217,11 @@ func (c *Client) Reader(room *Room, s *Server) {
 			c.Username = newName
 			c.currentRoom.Clients[newName] = c
 			c.currentRoom.Mu.Unlock()
+
+			select {
+			case c.currentRoom.UserUpdates <- struct{}{}:
+			default:
+			}
 
 			// Announce nick change
 			c.currentRoom.Messages <- ChatMessage{
