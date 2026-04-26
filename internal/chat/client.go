@@ -36,6 +36,9 @@ func NewClient(conn net.Conn, reader *bufio.Reader) {
 	if !utf8.ValidString(username) {
 		log.Fatalf("No valid utf8 username\n")
 	}
+	if strings.HasPrefix(username, "/") {
+		log.Fatalf("Username cannot start with /\n")
+	}
 
 	session.Username = username
 

@@ -31,6 +31,12 @@ func (c *Client) SafeClose() bool {
 		return false
 	}
 	c.closed = true
+	if c.Out != nil {
+		close(c.Out)
+	}
+	if c.Conn != nil {
+		c.Conn.Close()
+	}
 	return true
 }
 
@@ -38,6 +44,7 @@ type Server struct {
 	Rooms       map[string]*Room
 	Mu          sync.Mutex
 	BannedIPs   map[string]time.Time
+	Users       map[string]*Client // Global user index for O(1) lookups
 	RoomUpdates chan struct{}
 }
 
@@ -48,6 +55,7 @@ func NewServer() *Server {
 	s := &Server{
 		Rooms:       make(map[string]*Room),
 		BannedIPs:   make(map[string]time.Time),
+		Users:       make(map[string]*Client),
 		RoomUpdates: make(chan struct{}, 10),
 	}
 	s.Rooms["Main Room"] = NewRoom("Main Room")
@@ -68,7 +76,13 @@ func (s *Server) ServerBroadcaster() {
 		msg := strings.Join(lines, "\n")
 
 		s.Mu.Lock()
-		for _, room := range s.Rooms {
+		roomObjects := make([]*Room, 0, len(s.Rooms))
+		for _, r := range s.Rooms {
+			roomObjects = append(roomObjects, r)
+		}
+		s.Mu.Unlock()
+
+		for _, room := range roomObjects {
 			room.Mu.Lock()
 			for _, c := range room.Clients {
 				select {
@@ -78,7 +92,6 @@ func (s *Server) ServerBroadcaster() {
 			}
 			room.Mu.Unlock()
 		}
-		s.Mu.Unlock()
 	}
 }
 
@@ -141,12 +154,18 @@ func (s *Server) RegisterClientInRoom(room *Room, c *Client) error {
 		return ErrServerFull
 	}
 
+	if _, exists := s.Users[c.Username]; exists {
+		return errors.New("username already taken: " + c.Username)
+	}
+
 	room.Mu.Lock()
-	defer room.Mu.Unlock()
 	if _, exists := room.Clients[c.Username]; exists {
+		room.Mu.Unlock()
 		return errors.New("username already taken in this room: " + c.Username)
 	}
 	room.Clients[c.Username] = c
+	s.Users[c.Username] = c
+	room.Mu.Unlock()
 	log.Printf("Client %s joined room %s\n", c.Username, room.Name)
 
 	select {
@@ -170,6 +189,7 @@ func (s *Server) DisconnectClientFromRoom(room *Room, username string) bool {
 	}
 	log.Printf("Client %s left room %s\n", username, room.Name)
 	delete(room.Clients, username)
+	delete(s.Users, username)
 
 	select {
 	case s.RoomUpdates <- struct{}{}:
@@ -206,7 +226,10 @@ func (s *Server) GetRoomCount() int {
 func (s *Server) BanIP(addr string) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	ip := strings.Split(addr, ":")[0]
+	ip, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		ip = addr // fallback if no port present
+	}
 	log.Print("Ban enforced for IP: ", addr)
 	s.BannedIPs[ip] = time.Now().Add(1 * time.Minute)
 }
@@ -214,7 +237,10 @@ func (s *Server) BanIP(addr string) {
 func (s *Server) IsIPBanned(addr string) bool {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	ip := strings.Split(addr, ":")[0]
+	ip, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		ip = addr
+	}
 	banUntil, exists := s.BannedIPs[ip]
 	if !exists {
 		return false

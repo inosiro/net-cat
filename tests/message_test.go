@@ -9,7 +9,7 @@ import (
 
 func TestFormatMessage(t *testing.T) {
 	ts := time.Date(2020, 1, 20, 16, 3, 43, 0, time.UTC)
-	
+
 	tests := []struct {
 		name     string
 		msg      chat.ChatMessage
@@ -22,7 +22,7 @@ func TestFormatMessage(t *testing.T) {
 				User:      "Yenlik",
 				Text:      "hello",
 			},
-			expected: "[2020-01-20 16:03:43][Yenlik]:hello",
+			expected: "[2020-01-20 16:03:43][Yenlik]: hello",
 		},
 		{
 			name: "Join Event Message",
@@ -31,7 +31,7 @@ func TestFormatMessage(t *testing.T) {
 				User:      "SERVER",
 				Text:      "Lee has joined our chat...",
 			},
-			expected: "Lee has joined our chat...",
+			expected: "[2020-01-20 16:03:43] Lee has joined our chat...",
 		},
 		{
 			name: "Leave Event Message",
@@ -40,7 +40,7 @@ func TestFormatMessage(t *testing.T) {
 				User:      "SERVER",
 				Text:      "Lee has left our chat...",
 			},
-			expected: "Lee has left our chat...",
+			expected: "[2020-01-20 16:03:43] Lee has left our chat...",
 		},
 	}
 

@@ -30,13 +30,14 @@ func (c *Client) Writer() {
 }
 
 func (c *Client) disconnect(s *Server, announceLeave bool) {
-	s.DisconnectClientFromRoom(c.currentRoom, c.Username)
+	c.mu.Lock()
+	room := c.currentRoom
+	c.mu.Unlock()
+
+	s.DisconnectClientFromRoom(room, c.Username)
 	logConnectionDisconnected(c.Conn)
-	close(c.Out)
-	c.Conn.Close()
-	log.Printf("%s disconnected.\n", c.Username)
-	if announceLeave {
-		s.AnnounceLeave(c.currentRoom, c.Username)
+	if c.SafeClose() && announceLeave {
+		s.AnnounceLeave(room, c.Username)
 	}
 }
 
@@ -46,11 +47,17 @@ func logConnectionDisconnected(conn net.Conn) {
 
 // Reader reads incoming lines from the client's TCP connection.
 func (c *Client) Reader(room *Room, s *Server) {
+	c.mu.Lock()
 	c.currentRoom = room
-	scanner := bufio.NewScanner(c.Conn)
+	c.mu.Unlock()
+	reader := bufio.NewReader(c.Conn)
 
-	for scanner.Scan() {
-		text := strings.TrimSpace(scanner.Text())
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			break
+		}
+		text := strings.TrimSpace(line)
 		if text == "" {
 			continue
 		}
@@ -58,11 +65,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 		// Handle /leave command
 		if text == "/leave" {
 			c.Conn.Write([]byte("Goodbye!\n"))
-
-			// Properly clean up the client
-			if c.SafeClose() {
-				c.disconnect(s, true)
-			}
+			c.disconnect(s, true)
 			return
 		}
 
@@ -76,19 +79,9 @@ func (c *Client) Reader(room *Room, s *Server) {
 			targetUsername := strings.TrimSpace(parts[0])
 			message := strings.TrimSpace(parts[1])
 
-			// Find target user across all rooms
-			var targetClient *Client
-			rooms := s.ListRooms()
-			for _, roomName := range rooms {
-				room, _ := s.GetRoom(roomName)
-				room.Mu.Lock()
-				if client, exists := room.Clients[targetUsername]; exists {
-					targetClient = client
-					room.Mu.Unlock()
-					break
-				}
-				room.Mu.Unlock()
-			}
+			s.Mu.Lock()
+			targetClient := s.Users[targetUsername]
+			s.Mu.Unlock()
 
 			if targetClient == nil {
 				c.Out <- "This username doesnt exists"
@@ -118,9 +111,13 @@ func (c *Client) Reader(room *Room, s *Server) {
 		// Handle /users command
 		if text == "/users" {
 			c.Out <- "All users:"
-			clients := c.currentRoom.GetClients()
+			c.mu.Lock()
+			currRoom := c.currentRoom
+			c.mu.Unlock()
+
+			clients := currRoom.GetClients()
 			if len(clients) > 0 {
-				c.Out <- fmt.Sprintf("  [%s]: %s", c.currentRoom.Name, strings.Join(clients, ", "))
+				c.Out <- fmt.Sprintf("  [%s]: %s", currRoom.Name, strings.Join(clients, ", "))
 			}
 			continue
 		}
@@ -146,7 +143,9 @@ func (c *Client) Reader(room *Room, s *Server) {
 			}
 
 			// Remove from old room
+			c.mu.Lock()
 			oldRoom := c.currentRoom
+			c.mu.Unlock()
 			s.DisconnectClientFromRoom(oldRoom, c.Username)
 
 			// Add to new room
@@ -183,7 +182,9 @@ func (c *Client) Reader(room *Room, s *Server) {
 			}
 
 			// Update current room reference
+			c.mu.Lock()
 			c.currentRoom = newRoom
+			c.mu.Unlock()
 			log.Printf("%s switched room from %s to %s\n", c.Username, oldRoom.Name, newRoom.Name)
 
 			// Announce leave from old room
@@ -214,20 +215,27 @@ func (c *Client) Reader(room *Room, s *Server) {
 				continue
 			}
 
-			// Check if new name already exists in room
-			c.currentRoom.Mu.Lock()
-			if _, exists := c.currentRoom.Clients[newName]; exists && newName != c.Username {
-				c.currentRoom.Mu.Unlock()
+			s.Mu.Lock()
+			if _, exists := s.Users[newName]; exists && newName != c.Username {
+				s.Mu.Unlock()
 				c.Out <- "Username already taken in this room"
 				continue
 			}
 
 			// Update client's username
 			oldName := c.Username
+			c.mu.Lock()
+			currRoom := c.currentRoom
+			c.mu.Unlock()
+
+			currRoom.Mu.Lock()
 			delete(c.currentRoom.Clients, oldName)
+			delete(s.Users, oldName)
 			c.Username = newName
 			c.currentRoom.Clients[newName] = c
+			s.Users[newName] = c
 			c.currentRoom.Mu.Unlock()
+			s.Mu.Unlock()
 
 			select {
 			case c.currentRoom.UserUpdates <- struct{}{}:
@@ -268,9 +276,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 				c.mu.Unlock()
 				c.Conn.Write([]byte("You have been disconnected for spamming.\n"))
 				s.BanIP(c.Conn.RemoteAddr().String())
-				if c.SafeClose() {
-					c.disconnect(s, true)
-				}
+				c.disconnect(s, true)
 				return
 			}
 			c.mu.Unlock()
@@ -281,17 +287,16 @@ func (c *Client) Reader(room *Room, s *Server) {
 		c.spamCount = 0
 		c.mu.Unlock()
 
-		c.currentRoom.Messages <- ChatMessage{
+		c.mu.Lock()
+		currRoom := c.currentRoom
+		c.mu.Unlock()
+
+		currRoom.Messages <- ChatMessage{
 			Timestamp: time.Now(),
 			User:      c.Username,
 			Text:      text,
 		}
 	}
-
-	if !c.SafeClose() {
-		return
-	}
-
 	c.disconnect(s, true)
 }
 
@@ -321,14 +326,15 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 	conn.Write([]byte("Use /help for commands.\n"))
 	conn.Write([]byte(namePrompt))
 
-	scanner := bufio.NewScanner(conn)
-	if !scanner.Scan() {
+	reader := bufio.NewReader(conn)
+	nameLine, err := reader.ReadString('\n')
+	if err != nil {
 		logConnectionDisconnected(conn)
 		conn.Close()
 		return
 	}
 
-	name := strings.TrimRight(scanner.Text(), "\r\n")
+	name := strings.TrimSpace(nameLine)
 	if !ValidateUsername(name) {
 		conn.Write([]byte("Invalid username\n"))
 		logConnectionDisconnected(conn)

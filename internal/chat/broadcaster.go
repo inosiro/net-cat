@@ -27,6 +27,9 @@ func (r *Room) RoomBroadcaster() {
 				}
 			}
 			r.History = append(r.History, msg)
+			if len(r.History) > MaxRoomHistory {
+				r.History = r.History[1:]
+			}
 			r.Mu.Unlock()
 		case <-r.UserUpdates:
 			r.Mu.Lock()
@@ -55,7 +58,7 @@ func (r *Room) RoomBroadcaster() {
 func (s *Server) AnnounceJoin(room *Room, username string) {
 	room.Messages <- ChatMessage{
 		Timestamp: time.Now(),
-		User:      "SERVER",
+		User:      SystemUser,
 		Text:      fmt.Sprintf("%s has joined %s...", username, room.Name),
 	}
 }
@@ -64,7 +67,7 @@ func (s *Server) AnnounceJoin(room *Room, username string) {
 func (s *Server) AnnounceLeave(room *Room, username string) {
 	room.Messages <- ChatMessage{
 		Timestamp: time.Now(),
-		User:      "SERVER",
+		User:      SystemUser,
 		Text:      fmt.Sprintf("%s has left %s...", username, room.Name),
 	}
 }

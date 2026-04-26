@@ -8,6 +8,7 @@ import (
 )
 
 const MaxRooms = 256
+const MaxRoomHistory = 100
 
 type Room struct {
 	Name        string
@@ -91,17 +92,15 @@ func (r *Room) AnnounceLeave(username string) {
 // DisconnectClientFromRoom safely removes a client from the room.
 func (r *Room) DisconnectClientFromRoom(username string) bool {
 	r.Mu.Lock()
-	defer r.Mu.Unlock()
 	client, exists := r.Clients[username]
 	if !exists {
+		r.Mu.Unlock()
 		return false
 	}
-	if !client.SafeClose() {
-		return false
-	}
-	log.Printf("%s left room %s\n", username, r.Name)
 	delete(r.Clients, username)
-	close(client.Out)
-	client.Conn.Close()
+	r.Mu.Unlock()
+
+	client.SafeClose()
+	log.Printf("%s left room %s\n", username, r.Name)
 	return true
 }
