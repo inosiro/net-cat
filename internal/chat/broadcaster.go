@@ -8,7 +8,7 @@ import (
 
 // RoomBroadcaster is the central loop for a room that distributes messages to all clients
 // in that room and appends them to the room's history. Must be run as a goroutine.
-func (r *Room) RoomBroadcaster() {
+func (r *Room) RoomBroadcaster(s *Server) {
 	for {
 		select {
 		case msg, ok := <-r.Messages:
@@ -23,7 +23,7 @@ func (r *Room) RoomBroadcaster() {
 				case c.Out <- formatted:
 				default:
 					// Slow / dead client — disconnect asynchronously so we don't block
-					go r.DisconnectClientFromRoom(c.Username)
+					go s.DisconnectClientFromRoom(r, c.Username)
 				}
 			}
 			r.History = append(r.History, msg)

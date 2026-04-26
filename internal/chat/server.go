@@ -59,6 +59,7 @@ func NewServer() *Server {
 		RoomUpdates: make(chan struct{}, 10),
 	}
 	s.Rooms["Main Room"] = NewRoom("Main Room")
+	go s.Rooms["Main Room"].RoomBroadcaster(s)
 	go s.ServerBroadcaster()
 	return s
 }
@@ -182,14 +183,22 @@ func (s *Server) RegisterClientInRoom(room *Room, c *Client) error {
 
 // DisconnectClientFromRoom removes a client from a room.
 func (s *Server) DisconnectClientFromRoom(room *Room, username string) bool {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
 	room.Mu.Lock()
-	defer room.Mu.Unlock()
-	if _, exists := room.Clients[username]; !exists {
+	client, exists := room.Clients[username]
+	if !exists {
+		room.Mu.Unlock()
 		return false
 	}
+
 	log.Printf("Client %s left room %s\n", username, room.Name)
 	delete(room.Clients, username)
 	delete(s.Users, username)
+	room.Mu.Unlock()
+
+	// Close the client's resources after removing from maps
+	client.SafeClose()
 
 	select {
 	case s.RoomUpdates <- struct{}{}:

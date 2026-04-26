@@ -52,7 +52,7 @@ func main() {
 
 		// Start broadcaster for Main Room
 		mainRoom, _ := s.GetRoom("Main Room")
-		go mainRoom.RoomBroadcaster()
+		go mainRoom.RoomBroadcaster(s)
 
 		if err := s.ListenAndServe(port); err != nil {
 			log.Fatalf("Server error: %v\n", err)

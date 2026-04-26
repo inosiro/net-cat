@@ -38,7 +38,7 @@ func TestBroadcaster(t *testing.T) {
 	}
 
 	// Start the broadcaster in the background
-	go room.RoomBroadcaster()
+	go room.RoomBroadcaster(s)
 
 	msg := chat.ChatMessage{
 		Timestamp: time.Now(),
@@ -76,7 +76,7 @@ func TestSystemAnnouncements(t *testing.T) {
 		t.Fatalf("Failed to create room: %v", err)
 	}
 
-	go room.RoomBroadcaster()
+	go room.RoomBroadcaster(s)
 
 	serverSide, clientSide := net.Pipe()
 	defer serverSide.Close()
@@ -92,7 +92,7 @@ func TestSystemAnnouncements(t *testing.T) {
 	room.Mu.Unlock()
 
 	t.Run("Join announcement", func(t *testing.T) {
-		room.AnnounceJoin("Alice")
+		s.AnnounceJoin(room, "Alice")
 		select {
 		case got := <-observer.Out:
 			if got == "" {
@@ -104,7 +104,7 @@ func TestSystemAnnouncements(t *testing.T) {
 	})
 
 	t.Run("Leave announcement", func(t *testing.T) {
-		room.AnnounceLeave("Bob")
+		s.AnnounceLeave(room, "Bob")
 		select {
 		case got := <-observer.Out:
 			if got == "" {
@@ -139,7 +139,7 @@ func TestNonBlockingFanout(t *testing.T) {
 	room.Clients["slow"] = slowClient
 	room.Mu.Unlock()
 
-	go room.RoomBroadcaster()
+	go room.RoomBroadcaster(s)
 
 	// Send a message — broadcaster must NOT deadlock despite slow client
 	done := make(chan struct{})

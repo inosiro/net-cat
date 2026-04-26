@@ -139,7 +139,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 					continue
 				}
 				// Start broadcaster for new room
-				go newRoom.RoomBroadcaster()
+				go newRoom.RoomBroadcaster(s)
 			}
 
 			// Remove from old room
@@ -187,19 +187,9 @@ func (c *Client) Reader(room *Room, s *Server) {
 			c.mu.Unlock()
 			log.Printf("%s switched room from %s to %s\n", c.Username, oldRoom.Name, newRoom.Name)
 
-			// Announce leave from old room
-			oldRoom.Messages <- ChatMessage{
-				Timestamp: time.Now(),
-				User:      "SERVER",
-				Text:      fmt.Sprintf("%s left %s", c.Username, oldRoom.Name),
-			}
-
-			// Announce join to new room
-			newRoom.Messages <- ChatMessage{
-				Timestamp: time.Now(),
-				User:      "SERVER",
-				Text:      fmt.Sprintf("%s joined %s", c.Username, newRoom.Name),
-			}
+			// Announce leave and join using helpers for consistency
+			s.AnnounceLeave(oldRoom, c.Username)
+			s.AnnounceJoin(newRoom, c.Username)
 
 			// Send new room history
 			newRoom.SendHistory(c)
@@ -245,7 +235,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 			// Announce nick change
 			c.currentRoom.Messages <- ChatMessage{
 				Timestamp: time.Now(),
-				User:      "SERVER",
+				User:      SystemUser,
 				Text:      fmt.Sprintf("%s changed nickname to %s", oldName, newName),
 			}
 			continue

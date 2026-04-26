@@ -62,7 +62,7 @@ func (s *ClientSession) clientReader() {
 		// Keep last 64 messages in history (thread-safe)
 		s.HistoryMu.Lock()
 		s.History = append(s.History, line)
-		if len(s.History) > 64 {
+		if len(s.History) > MaxRoomHistory {
 			s.History = s.History[1:]
 		}
 		s.HistoryMu.Unlock()

@@ -1,14 +1,12 @@
 package chat
 
 import (
-	"log"
 	"slices"
 	"sync"
-	"time"
 )
 
 const MaxRooms = 256
-const MaxRoomHistory = 100
+const MaxRoomHistory = 64
 
 type Room struct {
 	Name        string
@@ -69,38 +67,4 @@ func (r *Room) SendHistory(c *Client) {
 	for _, msg := range r.History {
 		c.Out <- msg.FormatMessage()
 	}
-}
-
-// AnnounceJoin sends a join message to the room.
-func (r *Room) AnnounceJoin(username string) {
-	r.Messages <- ChatMessage{
-		Timestamp: time.Now(),
-		User:      "SERVER",
-		Text:      username + " has joined " + r.Name,
-	}
-}
-
-// AnnounceLeave sends a leave message to the room.
-func (r *Room) AnnounceLeave(username string) {
-	r.Messages <- ChatMessage{
-		Timestamp: time.Now(),
-		User:      "SERVER",
-		Text:      username + " has left " + r.Name,
-	}
-}
-
-// DisconnectClientFromRoom safely removes a client from the room.
-func (r *Room) DisconnectClientFromRoom(username string) bool {
-	r.Mu.Lock()
-	client, exists := r.Clients[username]
-	if !exists {
-		r.Mu.Unlock()
-		return false
-	}
-	delete(r.Clients, username)
-	r.Mu.Unlock()
-
-	client.SafeClose()
-	log.Printf("%s left room %s\n", username, r.Name)
-	return true
 }
