@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 const MaxClients = 10
@@ -155,6 +156,13 @@ func (s *Server) RegisterClientInRoom(room *Room, c *Client) error {
 		return ErrServerFull
 	}
 
+	c.Username = strings.TrimRight(c.Username, "\r\n")
+	if !utf8.ValidString(c.Username) {
+		return errors.New("No valid utf8 username\n")
+	}
+	if strings.HasPrefix(c.Username, "/") {
+		return errors.New("Username cannot start with /\n")
+	}
 	if _, exists := s.Users[c.Username]; exists {
 		return errors.New("username already taken: " + c.Username)
 	}
@@ -175,6 +183,45 @@ func (s *Server) RegisterClientInRoom(room *Room, c *Client) error {
 	}
 	select {
 	case room.UserUpdates <- struct{}{}:
+	default:
+	}
+
+	return nil
+}
+
+// MoveClientToRoom transfers a client from one room to another without closing the connection.
+func (s *Server) MoveClientToRoom(c *Client, oldRoom, newRoom *Room) error {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+
+	if oldRoom == newRoom {
+		return errors.New("already in this room")
+	}
+
+	newRoom.Mu.Lock()
+	if _, exists := newRoom.Clients[c.Username]; exists {
+		newRoom.Mu.Unlock()
+		return errors.New("username already taken in target room")
+	}
+
+	oldRoom.Mu.Lock()
+	delete(oldRoom.Clients, c.Username)
+	oldRoom.Mu.Unlock()
+
+	newRoom.Clients[c.Username] = c
+	newRoom.Mu.Unlock()
+
+	select {
+	case s.RoomUpdates <- struct{}{}:
+	default:
+	}
+	// Trigger user list updates for both rooms
+	select {
+	case oldRoom.UserUpdates <- struct{}{}:
+	default:
+	}
+	select {
+	case newRoom.UserUpdates <- struct{}{}:
 	default:
 	}
 

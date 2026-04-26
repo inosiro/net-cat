@@ -35,7 +35,7 @@ func main() {
 		port = argsAfterFlags[0]
 	}
 
-	if !*clientFlag { // server mode
+	if !*clientFlag && !*uiFlag { // server mode
 
 		if len(*outputFlag) > 0 {
 			f, err := os.OpenFile(*outputFlag, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)

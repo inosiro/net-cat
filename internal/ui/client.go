@@ -8,10 +8,10 @@ import (
 )
 
 type UIClient struct {
-	conn                    net.Conn
-	username                string
-	ui                      *UI
-	awaitingRoomJoin        bool
+	conn             net.Conn
+	username         string
+	ui               *UI
+	awaitingRoomJoin bool
 }
 
 func NewUIClient(addr string, ui *UI) (*UIClient, error) {
@@ -98,16 +98,21 @@ func (c *UIClient) reader() {
 		}
 
 		if collectingRooms {
-			if strings.HasPrefix(line, "  ") && strings.Contains(line, "(") {
-				trimmed := strings.TrimSpace(line)
-				if idx := strings.LastIndex(trimmed, " ("); idx > 0 {
-					roomName := strings.TrimSpace(trimmed[:idx])
-					rooms = append(rooms, roomName)
-					c.ui.UpdateRooms(rooms)
-				}
-				continue
-			}
+			// if strings.HasPrefix(line, "  ") && strings.Contains(line, "(") {
+			// 	trimmed := strings.TrimSpace(line)
+			// 	if idx := strings.LastIndex(trimmed, " ("); idx > 0 {
+			// 		roomName := strings.TrimSpace(trimmed[:idx])
+			// 		rooms = append(rooms, roomName)
+			// 		c.ui.UpdateRooms(rooms)
+			// 	}
+			// 	continue
+			// }
 
+			trimmed := strings.TrimSpace(line)
+			for _, room := range strings.Split(trimmed, "\n") {
+				rooms = append(rooms, room)
+				c.ui.UpdateRooms(rooms)
+			}
 			collectingRooms = false
 			c.ui.UpdateRooms(rooms)
 			// Fall through to process the current line, otherwise room events can be dropped.
@@ -120,23 +125,26 @@ func (c *UIClient) reader() {
 		}
 
 		if collectingUsers {
-			if strings.HasPrefix(line, "  [") {
-				parts := strings.SplitN(line, "]: ", 2)
-				if len(parts) == 2 {
-					userList := strings.Split(parts[1], ", ")
-					users = append(users, userList...)
-					c.ui.UpdateUsers(users)
-				}
-				continue
-			}
+			// if strings.HasPrefix(line, "  [") {
+			// 	parts := strings.SplitN(line, "]: ", 2)
+			// 	if len(parts) == 2 {
+			// 		userList := strings.Split(parts[1], ", ")
+			// 		users = append(users, userList...)
+			// 		c.ui.UpdateUsers(users)
+			// 	}
+			// 	continue
+			// }
 
+			for _, user := range strings.Split(line, "\n") {
+				users = append(users, user)
+				c.ui.UpdateUsers(users)
+			}
 			collectingUsers = false
 			c.ui.UpdateUsers(users)
 			// Fall through to process the current line, otherwise room events can be dropped.
 		}
 
 		// System messages about joining/leaving are now handled by broadcaster
-
 
 		c.ui.AddChatMessage(line)
 	}
@@ -152,5 +160,3 @@ func (c *UIClient) reader() {
 		c.ui.AddChatMessage(fmt.Sprintf("Connection error: %v", err))
 	}
 }
-
-

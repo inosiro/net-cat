@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jroimartin/gocui"
 )
@@ -139,6 +140,12 @@ func (ui *UI) setChatKeybindings() error {
 func (ui *UI) submitUsername(g *gocui.Gui, v *gocui.View) error {
 	username := strings.TrimSpace(v.Buffer())
 	if username == "" {
+		return nil
+	}
+	if !utf8.ValidString(username) {
+		return nil
+	}
+	if strings.HasPrefix(username, "/") {
 		return nil
 	}
 	ui.client.username = username

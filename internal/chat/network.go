@@ -100,25 +100,30 @@ func (c *Client) Reader(room *Room, s *Server) {
 		// Handle /rooms command
 		if text == "/rooms" {
 			rooms := s.ListRooms()
-			c.Out <- "Available rooms:"
+			var lines []string
+			lines = append(lines, "Available rooms:")
 			for _, roomName := range rooms {
 				room, _ := s.GetRoom(roomName)
-				c.Out <- fmt.Sprintf("  %s (%d users)", roomName, room.ClientCount())
+				lines = append(lines, fmt.Sprintf("  %s (%d users)", roomName, room.ClientCount()))
 			}
+			c.Out <- strings.Join(lines, "\n")
 			continue
 		}
 
 		// Handle /users command
 		if text == "/users" {
-			c.Out <- "All users:"
 			c.mu.Lock()
 			currRoom := c.currentRoom
 			c.mu.Unlock()
 
 			clients := currRoom.GetClients()
+			var msg string
 			if len(clients) > 0 {
-				c.Out <- fmt.Sprintf("  [%s]: %s", currRoom.Name, strings.Join(clients, ", "))
+				msg = fmt.Sprintf("All users:\n  [%s]: %s", currRoom.Name, strings.Join(clients, ", "))
+			} else {
+				msg = "All users:\n"
 			}
+			c.Out <- msg
 			continue
 		}
 
@@ -142,43 +147,13 @@ func (c *Client) Reader(room *Room, s *Server) {
 				go newRoom.RoomBroadcaster(s)
 			}
 
-			// Remove from old room
 			c.mu.Lock()
 			oldRoom := c.currentRoom
 			c.mu.Unlock()
-			s.DisconnectClientFromRoom(oldRoom, c.Username)
 
-			// Add to new room
-			newRoom.Mu.Lock()
-			if _, exists := newRoom.Clients[c.Username]; exists {
-				newRoom.Mu.Unlock()
-				c.Out <- "Username already taken in that room"
-				// Re-add to old room
-				oldRoom.Mu.Lock()
-				oldRoom.Clients[c.Username] = c
-				oldRoom.Mu.Unlock()
-
-				select {
-				case s.RoomUpdates <- struct{}{}:
-				default:
-				}
-				select {
-				case oldRoom.UserUpdates <- struct{}{}:
-				default:
-				}
-
+			if err := s.MoveClientToRoom(c, oldRoom, newRoom); err != nil {
+				c.Out <- err.Error()
 				continue
-			}
-			newRoom.Clients[c.Username] = c
-			newRoom.Mu.Unlock()
-
-			select {
-			case s.RoomUpdates <- struct{}{}:
-			default:
-			}
-			select {
-			case newRoom.UserUpdates <- struct{}{}:
-			default:
 			}
 
 			// Update current room reference
