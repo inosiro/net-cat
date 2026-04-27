@@ -2,10 +2,10 @@ package chat
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -15,6 +15,8 @@ type ClientSession struct {
 	Conn      net.Conn
 	Username  string
 	Reader    *bufio.Reader
+	Writer    *bufio.Writer
+	WriteMu   sync.Mutex
 	History   []string
 	HistoryMu sync.Mutex
 }
@@ -22,8 +24,9 @@ type ClientSession struct {
 func NewClient(conn net.Conn, reader *bufio.Reader) {
 	session := &ClientSession{
 		Conn:    conn,
-		Reader:  reader,
-		History: make([]string, 0, 64),
+		Reader:  reader, // stdin reader
+		Writer:  bufio.NewWriter(conn),
+		History: make([]string, 0, MaxRoomHistory),
 	}
 
 	// Read username from user
@@ -43,21 +46,41 @@ func NewClient(conn net.Conn, reader *bufio.Reader) {
 	session.Username = username
 
 	// Send username to server
-	_, err = conn.Write([]byte(username + "\n"))
+	session.WriteMu.Lock()
+	_, err = session.Writer.WriteString(username + "\n")
 	if err != nil {
 		log.Fatalf("Failed to send username: %v\n", err)
 	}
+	session.Writer.Flush()
+	session.WriteMu.Unlock()
 
 	// Now start concurrent reader and writer for ongoing chat
-	go session.clientReader()
-	session.clientWriter()
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	wg.Add(2)
+	go session.clientReader(ctx, &wg)
+	go session.clientWriter(ctx, cancel, &wg)
+	wg.Wait() // blocks until both goroutines finish
 }
 
 // clientReader continuously reads from the server and prints to stdout
-func (s *ClientSession) clientReader() {
-	scanner := bufio.NewScanner(s.Conn)
-	for scanner.Scan() {
-		line := scanner.Text()
+func (s *ClientSession) clientReader(ctx context.Context, wg *sync.WaitGroup) {
+	defer wg.Done()
+	reader := bufio.NewReader(s.Conn) // network reader
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// line := scanner.Text()
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			log.Printf("Read error: %v\n", err)
+			return
+		}
 		fmt.Println(line)
 		// Keep last 64 messages in history (thread-safe)
 		s.HistoryMu.Lock()
@@ -67,18 +90,21 @@ func (s *ClientSession) clientReader() {
 		}
 		s.HistoryMu.Unlock()
 	}
-	if err := scanner.Err(); err != nil {
-		log.Printf("Read error: %v\n", err)
-	}
-	os.Exit(0)
 }
 
 // clientWriter continuously reads from stdin and sends to the server
-func (s *ClientSession) clientWriter() {
+func (s *ClientSession) clientWriter(ctx context.Context, cancel context.CancelFunc, wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		line, err := s.Reader.ReadString('\n')
 		if err != nil {
-			log.Printf("Read error: %v\n", err)
+			cancel()
 			return
 		}
 
@@ -94,23 +120,25 @@ func (s *ClientSession) clientWriter() {
 			}
 		}
 
-		if isServerCommand {
+		if isServerCommand || !strings.HasPrefix(line, "/") {
 			// Send server command to server
-			_, err = s.Conn.Write([]byte(line + "\n"))
+			s.WriteMu.Lock()
+			_, err = s.Writer.WriteString(line + "\n")
 			if err != nil {
-				log.Printf("Write error: %v\n", err)
+				cancel()
 				return
 			}
-		} else if strings.HasPrefix(line, "/") {
-			// Handle client-side commands locally
-			s.handleCommand(line)
+			s.Writer.Flush()
+			s.WriteMu.Unlock()
+
+			// If /leave was sent, close connection and exit
+			if strings.HasPrefix(line, "/leave") {
+				cancel()
+				return
+			}
 		} else {
-			// Regular message
-			_, err = s.Conn.Write([]byte(line + "\n"))
-			if err != nil {
-				log.Printf("Write error: %v\n", err)
-				return
-			}
+			// Handle client-side commands locally: /history, /help
+			s.handleCommand(line)
 		}
 	}
 }
@@ -132,7 +160,7 @@ func (s *ClientSession) handleCommand(cmd string) {
 			fmt.Println("[No history available]")
 			return
 		}
-		fmt.Println("=== Chat History (last 64 messages) ===")
+		fmt.Printf("=== Chat History (last %d messages) ===\n", MaxRoomHistory)
 		for _, msg := range s.History {
 			fmt.Println(msg)
 		}
@@ -151,7 +179,7 @@ func (s *ClientSession) handleCommand(cmd string) {
 		fmt.Println("=== Available Commands ===")
 		fmt.Println("/nick <name>   - Change your nickname")
 		fmt.Println("/switch <room> - Switch to a different room")
-		fmt.Println("/history       - Show last 64 messages")
+		fmt.Printf("/history       - Show last %d messages\n", MaxRoomHistory)
 		fmt.Println("/stats         - Show server statistics")
 		fmt.Println("/rooms         - List rooms")
 		fmt.Println("/users         - List users in room")
