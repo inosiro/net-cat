@@ -48,6 +48,8 @@ type Server struct {
 	Users       map[string]*Client // Global user index for O(1) lookups
 	UserUpdates chan struct{}
 	RoomUpdates chan struct{}
+	Quit        chan struct{}
+	Listener    net.Listener
 }
 
 var ErrServerFull = errors.New("server is full: maximum clients reached")
@@ -60,6 +62,7 @@ func NewServer() *Server {
 		Users:       make(map[string]*Client),
 		UserUpdates: make(chan struct{}, 10),
 		RoomUpdates: make(chan struct{}, 10),
+		Quit:        make(chan struct{}),
 	}
 	s.Rooms["Main Room"] = NewRoom("Main Room")
 	go s.Rooms["Main Room"].RoomBroadcaster(s)
@@ -69,32 +72,37 @@ func NewServer() *Server {
 
 // ServerBroadcaster listens for room updates and broadcasts the available rooms to all clients.
 func (s *Server) ServerBroadcaster() {
-	for range s.RoomUpdates {
-		rooms := s.ListRooms()
-		var lines []string
-		lines = append(lines, "Available rooms:")
-		for _, roomName := range rooms {
-			room, _ := s.GetRoom(roomName)
-			lines = append(lines, fmt.Sprintf("  %s (%d users)", roomName, room.ClientCount()))
-		}
-		msg := strings.Join(lines, "\n")
-
-		s.Mu.Lock()
-		roomObjects := make([]*Room, 0, len(s.Rooms))
-		for _, r := range s.Rooms {
-			roomObjects = append(roomObjects, r)
-		}
-		s.Mu.Unlock()
-
-		for _, room := range roomObjects {
-			room.Mu.Lock()
-			for _, c := range room.Clients {
-				select {
-				case c.Out <- msg:
-				default:
-				}
+	for {
+		select {
+		case <-s.Quit:
+			return
+		case <-s.RoomUpdates:
+			rooms := s.ListRooms()
+			var lines []string
+			lines = append(lines, "Available rooms:")
+			for _, roomName := range rooms {
+				room, _ := s.GetRoom(roomName)
+				lines = append(lines, fmt.Sprintf("  %s (%d users)", roomName, room.ClientCount()))
 			}
-			room.Mu.Unlock()
+			msg := strings.Join(lines, "\n")
+
+			s.Mu.Lock()
+			roomObjects := make([]*Room, 0, len(s.Rooms))
+			for _, r := range s.Rooms {
+				roomObjects = append(roomObjects, r)
+			}
+			s.Mu.Unlock()
+
+			for _, room := range roomObjects {
+				room.Mu.Lock()
+				for _, c := range room.Clients {
+					select {
+					case c.Out <- msg:
+					default:
+					}
+				}
+				room.Mu.Unlock()
+			}
 		}
 	}
 }
@@ -176,6 +184,7 @@ func (s *Server) RegisterClientInRoom(room *Room, c *Client) error {
 	}
 	room.Clients[c.Username] = c
 	s.Users[c.Username] = c
+	c.currentRoom = room
 	room.Mu.Unlock()
 	log.Printf("Client %s joined room %s\n", c.Username, room.Name)
 
@@ -211,6 +220,7 @@ func (s *Server) MoveClientToRoom(c *Client, oldRoom, newRoom *Room) error {
 	oldRoom.Mu.Unlock()
 
 	newRoom.Clients[c.Username] = c
+	c.currentRoom = newRoom
 	newRoom.Mu.Unlock()
 
 	select {
@@ -260,9 +270,13 @@ func (s *Server) DisconnectClientFromRoom(room *Room, username string) bool {
 // GetTotalUserCount returns total users across all rooms
 func (s *Server) GetTotalUserCount() int {
 	s.Mu.Lock()
+	roomObjects := make([]*Room, 0, len(s.Rooms))
+	for _, r := range s.Rooms {
+		roomObjects = append(roomObjects, r)
+	}
 	defer s.Mu.Unlock()
 	total := 0
-	for _, room := range s.Rooms {
+	for _, room := range roomObjects {
 		room.Mu.Lock()
 		total += len(room.Clients)
 		room.Mu.Unlock()
@@ -310,6 +324,16 @@ func (s *Server) IsIPBanned(addr string) bool {
 func (s *Server) Shutdown() {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
+
+	select {
+	case <-s.Quit: // Already closed
+	default:
+		close(s.Quit)
+	}
+
+	if s.Listener != nil {
+		s.Listener.Close()
+	}
 
 	for _, room := range s.Rooms {
 		select {

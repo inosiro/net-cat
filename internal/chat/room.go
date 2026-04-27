@@ -28,18 +28,18 @@ func NewRoom(name string) *Room {
 }
 
 // AddClient adds a client to the room.
-func (r *Room) AddClient(c *Client) {
-	r.Mu.Lock()
-	defer r.Mu.Unlock()
-	r.Clients[c.Username] = c
-}
+// func (r *Room) AddClient(c *Client) {
+// 	r.Mu.Lock()
+// 	defer r.Mu.Unlock()
+// 	r.Clients[c.Username] = c
+// }
 
 // RemoveClient removes a client from the room.
-func (r *Room) RemoveClient(username string) {
-	r.Mu.Lock()
-	defer r.Mu.Unlock()
-	delete(r.Clients, username)
-}
+// func (r *Room) RemoveClient(username string) {
+// 	r.Mu.Lock()
+// 	defer r.Mu.Unlock()
+// 	delete(r.Clients, username)
+// }
 
 // ClientCount returns the number of clients in the room.
 func (r *Room) ClientCount() int {
@@ -63,8 +63,13 @@ func (r *Room) GetClients() []string {
 // SendHistory sends the room's history to a client.
 func (r *Room) SendHistory(c *Client) {
 	r.Mu.Lock()
+	history := append([]ChatMessage(nil), r.History...)
 	defer r.Mu.Unlock()
-	for _, msg := range r.History {
-		c.Out <- msg.FormatMessage()
+	for _, msg := range history {
+		select {
+		case c.Out <- msg.FormatMessage():
+		default:
+			return
+		}
 	}
 }

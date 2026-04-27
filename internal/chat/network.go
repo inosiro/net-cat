@@ -270,6 +270,12 @@ func (s *Server) AcceptLoop(ln net.Listener) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
+			// Check if we are shutting down
+			select {
+			case <-s.Quit:
+				return
+			default:
+			}
 			continue
 		}
 
@@ -355,6 +361,9 @@ func (s *Server) ListenAndServe(port string) error {
 	if err != nil {
 		return err
 	}
+	s.Mu.Lock()
+	s.Listener = ln
+	s.Mu.Unlock()
 	s.AcceptLoop(ln)
 	return nil
 }

@@ -57,18 +57,19 @@ func main() {
 		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 		go func() {
 			<-sigChan
-			log.Println("\n[*] Shutting down server broadcasters...")
+			log.Println("\n[*] Signal received, shutting down server...")
 			s.Shutdown()
-			os.Exit(0)
 		}()
 
-		// Start broadcaster for Main Room
-		mainRoom, _ := s.GetRoom("Main Room")
-		go mainRoom.RoomBroadcaster(s)
-
 		if err := s.ListenAndServe(port); err != nil {
-			log.Fatalf("Server error: %v\n", err)
+			select {
+			case <-s.Quit:
+				// Expected error when listener is closed during shutdown
+			default:
+				log.Fatalf("Server error: %v\n", err)
+			}
 		}
+		log.Println("[*] Server stopped gracefully.")
 	} else { // client mode
 
 		if *uiFlag {
