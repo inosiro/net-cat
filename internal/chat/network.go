@@ -203,7 +203,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 			s.Mu.Unlock()
 
 			select {
-			case c.currentRoom.UserUpdates <- struct{}{}:
+			case s.UserUpdates <- struct{}{}:
 			default:
 			}
 

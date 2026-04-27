@@ -9,7 +9,9 @@ import (
 	"netcat/internal/chat"
 	"netcat/internal/ui"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 )
 
 const namePrompt = "[ENTER YOUR NAME]:"
@@ -50,6 +52,16 @@ func main() {
 
 		s := chat.NewServer()
 
+		// Handle graceful shutdown for broadcasters
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			<-sigChan
+			log.Println("\n[*] Shutting down server broadcasters...")
+			s.Shutdown()
+			os.Exit(0)
+		}()
+
 		// Start broadcaster for Main Room
 		mainRoom, _ := s.GetRoom("Main Room")
 		go mainRoom.RoomBroadcaster(s)
@@ -78,7 +90,7 @@ func main() {
 			fmt.Println("[*] Connected to server")
 			reader := bufio.NewReader(os.Stdin)
 
-			banner, err := readStartupBanner(conn)
+			banner, err := chat.ReadStartupBanner(conn)
 			if err != nil {
 				log.Fatalf("Failed to read banner: %v\n", err)
 			}
@@ -89,24 +101,6 @@ func main() {
 			}
 			chat.NewClient(conn, reader)
 			return
-		}
-	}
-}
-
-func readStartupBanner(conn net.Conn) (string, error) {
-	buf := make([]byte, 1024)
-	var b strings.Builder
-
-	for {
-		n, err := conn.Read(buf)
-		if n > 0 {
-			b.Write(buf[:n])
-			if strings.Contains(b.String(), namePrompt) {
-				return b.String(), nil
-			}
-		}
-		if err != nil {
-			return b.String(), err
 		}
 	}
 }

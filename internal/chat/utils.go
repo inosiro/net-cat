@@ -1,6 +1,10 @@
 package chat
 
-import "unicode"
+import (
+	"net"
+	"strings"
+	"unicode"
+)
 
 func ValidateUsername(name string) bool {
 	if len(name) == 0 || len(name) > 32 {
@@ -12,4 +16,22 @@ func ValidateUsername(name string) bool {
 		}
 	}
 	return true
+}
+
+func ReadStartupBanner(conn net.Conn) (string, error) {
+	buf := make([]byte, 1024)
+	var b strings.Builder
+
+	for {
+		n, err := conn.Read(buf)
+		if n > 0 {
+			b.Write(buf[:n])
+			if strings.Contains(b.String(), namePrompt) {
+				return b.String(), nil
+			}
+		}
+		if err != nil {
+			return b.String(), err
+		}
+	}
 }

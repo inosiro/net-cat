@@ -46,6 +46,7 @@ type Server struct {
 	Mu          sync.Mutex
 	BannedIPs   map[string]time.Time
 	Users       map[string]*Client // Global user index for O(1) lookups
+	UserUpdates chan struct{}
 	RoomUpdates chan struct{}
 }
 
@@ -57,6 +58,7 @@ func NewServer() *Server {
 		Rooms:       make(map[string]*Room),
 		BannedIPs:   make(map[string]time.Time),
 		Users:       make(map[string]*Client),
+		UserUpdates: make(chan struct{}, 10),
 		RoomUpdates: make(chan struct{}, 10),
 	}
 	s.Rooms["Main Room"] = NewRoom("Main Room")
@@ -182,7 +184,7 @@ func (s *Server) RegisterClientInRoom(room *Room, c *Client) error {
 	default:
 	}
 	select {
-	case room.UserUpdates <- struct{}{}:
+	case s.UserUpdates <- struct{}{}:
 	default:
 	}
 
@@ -217,11 +219,7 @@ func (s *Server) MoveClientToRoom(c *Client, oldRoom, newRoom *Room) error {
 	}
 	// Trigger user list updates for both rooms
 	select {
-	case oldRoom.UserUpdates <- struct{}{}:
-	default:
-	}
-	select {
-	case newRoom.UserUpdates <- struct{}{}:
+	case s.UserUpdates <- struct{}{}:
 	default:
 	}
 
@@ -252,7 +250,7 @@ func (s *Server) DisconnectClientFromRoom(room *Room, username string) bool {
 	default:
 	}
 	select {
-	case room.UserUpdates <- struct{}{}:
+	case s.UserUpdates <- struct{}{}:
 	default:
 	}
 
@@ -306,4 +304,18 @@ func (s *Server) IsIPBanned(addr string) bool {
 		return false
 	}
 	return true
+}
+
+// Shutdown gracefully stops all room broadcasters.
+func (s *Server) Shutdown() {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+
+	for _, room := range s.Rooms {
+		select {
+		case <-room.Done: // Already closed
+		default:
+			close(room.Done)
+		}
+	}
 }
