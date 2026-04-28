@@ -34,7 +34,9 @@ func (c *Client) disconnect(s *Server, announceLeave bool) {
 	room := c.currentRoom
 	c.mu.Unlock()
 
-	s.DisconnectClientFromRoom(room, c.Username)
+	if room != nil {
+		room.Disconnect(c)
+	}
 	logConnectionDisconnected(c.Conn)
 	if c.SafeClose() && announceLeave {
 		s.AnnounceLeave(room, c.Username)
@@ -101,11 +103,12 @@ func (c *Client) Reader(room *Room, s *Server) {
 		if text == "/rooms" {
 			rooms := s.ListRooms()
 			var lines []string
-			lines = append(lines, "Available rooms:")
+			lines = append(lines, "[ROOM_LIST_START]")
 			for _, roomName := range rooms {
 				room, _ := s.GetRoom(roomName)
-				lines = append(lines, fmt.Sprintf("  %s (%d users)", roomName, room.ClientCount()))
+				lines = append(lines, fmt.Sprintf("%s (%d users)", roomName, room.ClientCount()))
 			}
+			lines = append(lines, "[ROOM_LIST_END]")
 			c.Out <- strings.Join(lines, "\n")
 			continue
 		}
@@ -117,13 +120,11 @@ func (c *Client) Reader(room *Room, s *Server) {
 			c.mu.Unlock()
 
 			clients := currRoom.GetClients()
-			var msg string
-			if len(clients) > 0 {
-				msg = fmt.Sprintf("All users:\n  [%s]: %s", currRoom.Name, strings.Join(clients, ", "))
-			} else {
-				msg = "All users:\n"
-			}
-			c.Out <- msg
+			var lines []string
+			lines = append(lines, "[USER_LIST_START]")
+			lines = append(lines, clients...)
+			lines = append(lines, "[USER_LIST_END]")
+			c.Out <- strings.Join(lines, "\n")
 			continue
 		}
 
@@ -162,12 +163,6 @@ func (c *Client) Reader(room *Room, s *Server) {
 			c.mu.Unlock()
 			log.Printf("%s switched room from %s to %s\n", c.Username, oldRoom.Name, newRoom.Name)
 
-			// Announce leave and join using helpers for consistency
-			s.AnnounceLeave(oldRoom, c.Username)
-			s.AnnounceJoin(newRoom, c.Username)
-
-			// Send new room history
-			newRoom.SendHistory(c)
 			c.Out <- fmt.Sprintf("Switched to room: %s", newRoom.Name)
 			continue
 		}
@@ -193,14 +188,12 @@ func (c *Client) Reader(room *Room, s *Server) {
 			currRoom := c.currentRoom
 			c.mu.Unlock()
 
-			currRoom.Mu.Lock()
-			delete(c.currentRoom.Clients, oldName)
+			s.Mu.Lock()
 			delete(s.Users, oldName)
 			c.Username = newName
-			c.currentRoom.Clients[newName] = c
 			s.Users[newName] = c
-			c.currentRoom.Mu.Unlock()
 			s.Mu.Unlock()
+			currRoom.ChangeNick(c, oldName, newName)
 
 			select {
 			case s.UserUpdates <- struct{}{}:
@@ -343,12 +336,6 @@ func (s *Server) handleNewConnection(conn net.Conn) {
 		return
 	}
 	log.Printf("%s connected.\n", c.Username)
-
-	// Send room history
-	selectedRoom.SendHistory(c)
-
-	// Announce join
-	s.AnnounceJoin(selectedRoom, c.Username)
 
 	// Start writer and reader
 	go c.Writer()

@@ -2,69 +2,150 @@ package chat
 
 import (
 	"fmt"
+	"strings"
 	"time"
+	"slices"
 )
 
-// RoomBroadcaster is the central loop for a room that distributes messages to all clients
-// in that room and appends them to the room's history. Must be run as a goroutine.
 func (r *Room) RoomBroadcaster(s *Server) {
 	for {
 		select {
-		// add Done to room to avoid goroutine leaks, stop broadcaster on server shutdown
-		case <-r.Done:
-			return
 		case msg, ok := <-r.Messages:
 			if !ok {
+				r.shutdown()
 				return
 			}
-			formatted := msg.FormatMessage()
+			r.handleMessage(s, msg)
 
-			r.Mu.Lock()
-			clients := make([]*Client, 0, len(r.Clients))
-			for _, c := range r.Clients {
-				clients = append(clients, c)
-			}
-			r.History = append(r.History, msg)
-			if len(r.History) > MaxRoomHistory {
-				r.History = r.History[1:]
-			}
-			r.Mu.Unlock()
+		case ev := <-r.events:
+			switch ev.typ {
+			case roomJoin:
+				r.handleJoin(s, ev.client)
 
-			for _, c := range clients {
-				select {
-				case c.Out <- formatted:
-				default:
-					// Slow / dead client — disconnect asynchronously so we don't block
-					// go s.DisconnectClientFromRoom(r, c.Username)
-					r.requestDisconnect(s, c)
+			case roomLeave:
+				r.handleLeave(s, ev.client)
+
+			case roomDisconnect:
+				r.handleDisconnect(s, ev.client)
+
+			case roomShutdown:
+				r.shutdown()
+				return
+
+			case roomNickChange:
+				r.handleNickChange(s, ev.client, ev.oldName, ev.newName)
+
+			case roomClientCount:
+				ev.respChan <- len(r.clients)
+
+			case roomGetClients:
+				clients := make([]string, 0, len(r.clients))
+				for username := range r.clients {
+					clients = append(clients, username)
 				}
+				slices.Sort(clients)
+				ev.respChan <- clients
 			}
-			// case <-r.UserUpdates:
-			// 	r.Mu.Lock()
-			// 	var clients []string
-			// 	for _, c := range r.Clients {
-			// 		clients = append(clients, c.Username)
-			// 	}
-			// 	var msg string
-			// 	if len(clients) > 0 {
-			// 		msg = fmt.Sprintf("All users:\n  [%s]: %s", r.Name, strings.Join(clients, ", "))
-			// 	} else {
-			// 		msg = "All users:\n"
-			// 	}
-			// 	for _, c := range r.Clients {
-			// 		select {
-			// 		case c.Out <- msg:
-			// 		default:
-			// 		}
-			// 	}
-			// 	r.Mu.Unlock()
+
+		case <-r.done:
+			return
 		}
 	}
 }
 
-func (r *Room) requestDisconnect(s *Server, c *Client) {
-	if c.SafeClose() {
-		s.DisconnectClientFromRoom(r, c.Username)
+func (r *Room) handleMessage(s *Server, msg ChatMessage) {
+	formatted := msg.FormatMessage()
+
+	r.history = append(r.history, msg)
+	if len(r.history) > MaxRoomHistory {
+		r.history = r.history[1:]
+	}
+
+	for _, c := range r.clients {
+		select {
+		case c.Out <- formatted:
+		default:
+			r.events <- roomEvent{
+				typ:    roomDisconnect,
+				client: c,
+			}
+		}
+	}
+}
+
+func (r *Room) handleJoin(s *Server, c *Client) {
+	r.clients[c.Username] = c
+
+	for _, msg := range r.history {
+		select {
+		case c.Out <- msg.FormatMessage():
+		default:
+			r.events <- roomEvent{typ: roomDisconnect, client: c}
+			return
+		}
+	}
+
+	s.AnnounceJoin(r, c.Username)
+	r.broadcastUsersList()
+}
+
+func (r *Room) handleLeave(s *Server, c *Client) {
+	if _, ok := r.clients[c.Username]; !ok {
+		return
+	}
+
+	delete(r.clients, c.Username)
+	s.AnnounceLeave(r, c.Username)
+	r.broadcastUsersList()
+}
+
+func (r *Room) handleDisconnect(s *Server, c *Client) {
+	if _, ok := r.clients[c.Username]; !ok {
+		return
+	}
+
+	delete(r.clients, c.Username)
+	c.SafeClose()
+	s.FinalizeClientDisconnect(c)
+	s.AnnounceLeave(r, c.Username)
+	r.broadcastUsersList()
+}
+
+func (r *Room) handleNickChange(s *Server, c *Client, oldName, newName string) {
+	if _, ok := r.clients[oldName]; ok {
+		delete(r.clients, oldName)
+		r.clients[newName] = c
+	}
+	r.broadcastUsersList()
+}
+
+func (r *Room) shutdown() {
+	for _, c := range r.clients {
+		c.SafeClose()
+	}
+
+	r.clients = nil
+	close(r.done)
+}
+
+func (r *Room) broadcastUsersList() {
+	var clients []string
+	for _, c := range r.clients {
+		clients = append(clients, c.Username)
+	}
+	slices.Sort(clients)
+
+	var lines []string
+	lines = append(lines, "[USER_LIST_START]")
+	lines = append(lines, clients...)
+	lines = append(lines, "[USER_LIST_END]")
+	msg := strings.Join(lines, "\n")
+
+	for _, c := range r.clients {
+		select {
+		case c.Out <- msg:
+		default:
+		}
 	}
 }
 

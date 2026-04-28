@@ -8,9 +8,26 @@ import (
 	"github.com/jroimartin/gocui"
 )
 
+type UIEventType int
+
+const (
+	UIEventChatMessage UIEventType = iota
+	UIEventRoomsUpdate
+	UIEventUsersUpdate
+	UIEventQuit
+	UIEventUsernameError
+)
+
+type UIEvent struct {
+	Type  UIEventType
+	Text  string
+	Items []string
+}
+
 type UI struct {
 	g           *gocui.Gui
 	client      *UIClient
+	events      chan UIEvent
 	chatHistory []string
 	rooms       []string
 	users       []string
@@ -25,6 +42,7 @@ func NewUI() (*UI, error) {
 	g.Cursor = true
 	return &UI{
 		g:           g,
+		events:      make(chan UIEvent, 128),
 		chatHistory: []string{},
 		rooms:       []string{},
 		users:       []string{},
@@ -44,6 +62,10 @@ func (ui *UI) Start(addr string) error {
 		return err
 	}
 	ui.client = client
+
+	go func() {
+		_ = ui.Run()
+	}()
 
 	if err := ui.g.MainLoop(); err != nil && err != gocui.ErrQuit {
 		return err
@@ -200,7 +222,62 @@ func (ui *UI) scrollDown(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func (ui *UI) AddChatMessage(msg string) {
+func (ui *UI) Run() error {
+	for ev := range ui.events {
+		switch ev.Type {
+
+			case UIEventChatMessage:
+				ui.handleChatMessage(ev.Text)
+
+			case UIEventRoomsUpdate:
+				ui.handleRoomsUpdate(ev.Items)
+
+			case UIEventUsersUpdate:
+				ui.handleUsersUpdate(ev.Items)
+
+			case UIEventUsernameError:
+				ui.handleUsernameError(ev.Text)
+
+			case UIEventQuit:
+				return gocui.ErrQuit
+			}
+	}
+	return nil
+}
+
+func (ui *UI) PostChatMessage(msg string) {
+	ui.events <- UIEvent{
+		Type: UIEventChatMessage,
+		Text: msg,
+	}
+}
+
+func (ui *UI) PostRooms(rooms []string) {
+	ui.events <- UIEvent{
+		Type:  UIEventRoomsUpdate,
+		Items: rooms,
+	}
+}
+
+func (ui *UI) PostUsers(users []string) {
+	ui.events <- UIEvent{
+		Type:  UIEventUsersUpdate,
+		Items: users,
+	}
+}
+
+func (ui *UI) PostUsernameError(message string) {
+	ui.events <- UIEvent{
+		Type: UIEventUsernameError,
+		Text: message,
+	}
+}
+
+func (ui *UI) Quit() {
+	ui.events <- UIEvent{Type: UIEventQuit}
+}
+
+func (ui *UI) handleChatMessage(msg string) {
 	ui.chatHistory = append(ui.chatHistory, msg)
 	if len(ui.chatHistory) > 64 {
 		ui.chatHistory = ui.chatHistory[1:]
@@ -219,8 +296,8 @@ func (ui *UI) SetRooms(rooms []string) {
 	ui.rooms = rooms
 }
 
-func (ui *UI) UpdateRooms(rooms []string) {
-	ui.rooms = rooms
+func (ui *UI) handleRoomsUpdate(rooms []string) {
+	ui.rooms = append([]string(nil), rooms...)
 	ui.g.Update(func(g *gocui.Gui) error {
 		ui.updateRoomsView()
 		g.SetCurrentView("input")
@@ -228,8 +305,8 @@ func (ui *UI) UpdateRooms(rooms []string) {
 	})
 }
 
-func (ui *UI) UpdateUsers(users []string) {
-	ui.users = users
+func (ui *UI) handleUsersUpdate(users []string) {
+	ui.users = append([]string(nil), users...)
 	ui.g.Update(func(g *gocui.Gui) error {
 		ui.updateUsersView()
 		g.SetCurrentView("input")
@@ -294,7 +371,7 @@ func (ui *UI) showHelp() {
 	})
 }
 
-func (ui *UI) showUsernameError(message string) {
+func (ui *UI) handleUsernameError(message string) {
 	ui.g.Update(func(g *gocui.Gui) error {
 		prompt, err := g.View("prompt")
 		if err != nil {
@@ -316,9 +393,7 @@ func (ui *UI) showUsernameError(message string) {
 }
 
 func (ui *UI) requestQuit() {
-	ui.g.Update(func(g *gocui.Gui) error {
-		return gocui.ErrQuit
-	})
+	ui.Quit()
 }
 
 func quit(g *gocui.Gui, v *gocui.View) error {

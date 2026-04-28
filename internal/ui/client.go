@@ -59,104 +59,77 @@ func (c *UIClient) reader() {
 
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		if line == "[ROOM_LIST_START]" {
+			collectingRooms = true
+			rooms = []string{}
+			continue
+		}
+		if line == "[ROOM_LIST_END]" {
+			collectingRooms = false
+			c.ui.PostRooms(rooms)
+			continue
+		}
+		if collectingRooms {
+			if strings.TrimSpace(line) != "" {
+				rooms = append(rooms, strings.TrimSpace(line))
+			}
+			continue
+		}
+
+		if line == "[USER_LIST_START]" {
+			collectingUsers = true
+			users = []string{}
+			continue
+		}
+		if line == "[USER_LIST_END]" {
+			collectingUsers = false
+			c.ui.PostUsers(users)
+			continue
+		}
+		if collectingUsers {
+			if strings.TrimSpace(line) != "" {
+				users = append(users, strings.TrimSpace(line))
+			}
+			continue
+		}
+
 		if strings.HasPrefix(line, "Switched to room:") {
-			c.ui.AddChatMessage(line)
+			c.ui.PostChatMessage(line)
 			continue
 		}
 
 		if line == "Invalid username" || line == "Chat is full. Try again later." || strings.HasPrefix(line, "You are banned") {
-			c.ui.showUsernameError(line)
+			c.ui.PostUsernameError(line)
 			continue
 		}
 
 		if line == "Goodbye!" {
-			c.ui.AddChatMessage(line)
-			c.ui.requestQuit()
+			c.ui.PostChatMessage(line)
+			c.ui.Quit()
 			return
 		}
 
 		if c.awaitingRoomJoin {
 			if line == "Invalid username" || line == "Chat is full. Try again later." || strings.HasPrefix(line, "You are banned") || line == "Username already taken in this room" {
 				c.awaitingRoomJoin = false
-				c.ui.showUsernameError(line)
+				c.ui.PostUsernameError(line)
 				continue
 			}
 
 			// First non-error message indicates successful join
 			c.awaitingRoomJoin = false
-			c.ui.users = []string{c.username}
+			c.ui.PostUsers([]string{c.username})
 			c.ui.showChatLayout()
 			const uiLogo = "Welcome to TCP-Chat!\n         _nnnn_\n        dGGGGMMb\n       @p~qp~~qMb\n       M|@||@) M|\n       @,----.JM|\n      JS^\\__/  qKL\n     dZP        qKRb\n    dZP          qKKb\n   fZP            SMMb\n   HZM            MMMM\n   FqM            MMMM\n __| \".        |\\dS\"qML\n |    `.       | `' \\Zq\n_)      \\.___.,|     .'\n\\____   )MMMMMP|   .'\n     `-'       `--'"
-			c.ui.AddChatMessage(uiLogo)
-			c.ui.AddChatMessage("Use /help for commands.")
+			c.ui.PostChatMessage(uiLogo)
+			c.ui.PostChatMessage("Use /help for commands.")
 		}
 
-		if line == "Available rooms:" {
-			collectingRooms = true
-			rooms = []string{}
-			continue
-		}
-
-		if collectingRooms {
-			// if strings.HasPrefix(line, "  ") && strings.Contains(line, "(") {
-			// 	trimmed := strings.TrimSpace(line)
-			// 	if idx := strings.LastIndex(trimmed, " ("); idx > 0 {
-			// 		roomName := strings.TrimSpace(trimmed[:idx])
-			// 		rooms = append(rooms, roomName)
-			// 		c.ui.UpdateRooms(rooms)
-			// 	}
-			// 	continue
-			// }
-
-			trimmed := strings.TrimSpace(line)
-			for _, room := range strings.Split(trimmed, "\n") {
-				rooms = append(rooms, room)
-				c.ui.UpdateRooms(rooms)
-			}
-			collectingRooms = false
-			c.ui.UpdateRooms(rooms)
-			// Fall through to process the current line, otherwise room events can be dropped.
-		}
-
-		if line == "All users:" {
-			collectingUsers = true
-			users = []string{}
-			continue
-		}
-
-		if collectingUsers {
-			// if strings.HasPrefix(line, "  [") {
-			// 	parts := strings.SplitN(line, "]: ", 2)
-			// 	if len(parts) == 2 {
-			// 		userList := strings.Split(parts[1], ", ")
-			// 		users = append(users, userList...)
-			// 		c.ui.UpdateUsers(users)
-			// 	}
-			// 	continue
-			// }
-
-			for _, user := range strings.Split(line, "\n") {
-				users = append(users, user)
-				c.ui.UpdateUsers(users)
-			}
-			collectingUsers = false
-			c.ui.UpdateUsers(users)
-			// Fall through to process the current line, otherwise room events can be dropped.
-		}
-
-		// System messages about joining/leaving are now handled by broadcaster
-
-		c.ui.AddChatMessage(line)
-	}
-
-	if collectingRooms {
-		c.ui.UpdateRooms(rooms)
-	}
-	if collectingUsers {
-		c.ui.UpdateUsers(users)
+		c.ui.PostChatMessage(line)
 	}
 
 	if err := scanner.Err(); err != nil {
-		c.ui.AddChatMessage(fmt.Sprintf("Connection error: %v", err))
+		c.ui.PostChatMessage(fmt.Sprintf("Connection error: %v", err))
 	}
 }

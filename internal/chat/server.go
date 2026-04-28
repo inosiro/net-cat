@@ -79,30 +79,22 @@ func (s *Server) ServerBroadcaster() {
 		case <-s.RoomUpdates:
 			rooms := s.ListRooms()
 			var lines []string
-			lines = append(lines, "Available rooms:")
+			lines = append(lines, "[ROOM_LIST_START]")
 			for _, roomName := range rooms {
 				room, _ := s.GetRoom(roomName)
-				lines = append(lines, fmt.Sprintf("  %s (%d users)", roomName, room.ClientCount()))
+				lines = append(lines, fmt.Sprintf("%s (%d users)", roomName, room.ClientCount()))
 			}
+			lines = append(lines, "[ROOM_LIST_END]")
 			msg := strings.Join(lines, "\n")
 
 			s.Mu.Lock()
-			roomObjects := make([]*Room, 0, len(s.Rooms))
-			for _, r := range s.Rooms {
-				roomObjects = append(roomObjects, r)
+			for _, c := range s.Users {
+				select {
+				case c.Out <- msg:
+				default:
+				}
 			}
 			s.Mu.Unlock()
-
-			for _, room := range roomObjects {
-				room.Mu.Lock()
-				for _, c := range room.Clients {
-					select {
-					case c.Out <- msg:
-					default:
-					}
-				}
-				room.Mu.Unlock()
-			}
 		}
 	}
 }
@@ -154,38 +146,31 @@ func (s *Server) ListRooms() []string {
 // RegisterClientInRoom adds a client to a room.
 func (s *Server) RegisterClientInRoom(room *Room, c *Client) error {
 	s.Mu.Lock()
-	defer s.Mu.Unlock()
 
-	totalClients := 0
-	for _, currentRoom := range s.Rooms {
-		currentRoom.Mu.Lock()
-		totalClients += len(currentRoom.Clients)
-		currentRoom.Mu.Unlock()
-	}
-	if totalClients >= MaxClients {
+	if len(s.Users) >= MaxClients {
+		s.Mu.Unlock()
 		return ErrServerFull
 	}
 
 	c.Username = strings.TrimRight(c.Username, "\r\n")
 	if !utf8.ValidString(c.Username) {
+		s.Mu.Unlock()
 		return errors.New("No valid utf8 username\n")
 	}
 	if strings.HasPrefix(c.Username, "/") {
+		s.Mu.Unlock()
 		return errors.New("Username cannot start with /\n")
 	}
 	if _, exists := s.Users[c.Username]; exists {
+		s.Mu.Unlock()
 		return errors.New("username already taken: " + c.Username)
 	}
 
-	room.Mu.Lock()
-	if _, exists := room.Clients[c.Username]; exists {
-		room.Mu.Unlock()
-		return errors.New("username already taken in this room: " + c.Username)
-	}
-	room.Clients[c.Username] = c
 	s.Users[c.Username] = c
 	c.currentRoom = room
-	room.Mu.Unlock()
+	s.Mu.Unlock()
+
+	room.Join(c)
 	log.Printf("Client %s joined room %s\n", c.Username, room.Name)
 
 	select {
@@ -209,19 +194,9 @@ func (s *Server) MoveClientToRoom(c *Client, oldRoom, newRoom *Room) error {
 		return errors.New("already in this room")
 	}
 
-	newRoom.Mu.Lock()
-	if _, exists := newRoom.Clients[c.Username]; exists {
-		newRoom.Mu.Unlock()
-		return errors.New("username already taken in target room")
-	}
-
-	oldRoom.Mu.Lock()
-	delete(oldRoom.Clients, c.Username)
-	oldRoom.Mu.Unlock()
-
-	newRoom.Clients[c.Username] = c
+	oldRoom.Leave(c)
 	c.currentRoom = newRoom
-	newRoom.Mu.Unlock()
+	newRoom.Join(c)
 
 	select {
 	case s.RoomUpdates <- struct{}{}:
@@ -236,24 +211,15 @@ func (s *Server) MoveClientToRoom(c *Client, oldRoom, newRoom *Room) error {
 	return nil
 }
 
-// DisconnectClientFromRoom removes a client from a room.
-func (s *Server) DisconnectClientFromRoom(room *Room, username string) bool {
+// FinalizeClientDisconnect removes a client from the server's global maps.
+func (s *Server) FinalizeClientDisconnect(c *Client) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	room.Mu.Lock()
-	client, exists := room.Clients[username]
-	if !exists {
-		room.Mu.Unlock()
-		return false
+	
+	if _, exists := s.Users[c.Username]; exists {
+		log.Printf("Client %s disconnected from server\n", c.Username)
+		delete(s.Users, c.Username)
 	}
-
-	log.Printf("Client %s left room %s\n", username, room.Name)
-	delete(room.Clients, username)
-	delete(s.Users, username)
-	room.Mu.Unlock()
-
-	// Close the client's resources after removing from maps
-	client.SafeClose()
 
 	select {
 	case s.RoomUpdates <- struct{}{}:
@@ -263,25 +229,13 @@ func (s *Server) DisconnectClientFromRoom(room *Room, username string) bool {
 	case s.UserUpdates <- struct{}{}:
 	default:
 	}
-
-	return true
 }
 
 // GetTotalUserCount returns total users across all rooms
 func (s *Server) GetTotalUserCount() int {
 	s.Mu.Lock()
-	roomObjects := make([]*Room, 0, len(s.Rooms))
-	for _, r := range s.Rooms {
-		roomObjects = append(roomObjects, r)
-	}
 	defer s.Mu.Unlock()
-	total := 0
-	for _, room := range roomObjects {
-		room.Mu.Lock()
-		total += len(room.Clients)
-		room.Mu.Unlock()
-	}
-	return total
+	return len(s.Users)
 }
 
 // GetRoomCount returns the number of rooms
@@ -336,10 +290,6 @@ func (s *Server) Shutdown() {
 	}
 
 	for _, room := range s.Rooms {
-		select {
-		case <-room.Done: // Already closed
-		default:
-			close(room.Done)
-		}
+		room.Shutdown()
 	}
 }
