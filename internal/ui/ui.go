@@ -32,6 +32,7 @@ type UI struct {
 	rooms       []string
 	users       []string
 	currentRoom string
+	errMessage  string
 }
 
 func NewUI() (*UI, error) {
@@ -50,7 +51,12 @@ func NewUI() (*UI, error) {
 }
 
 func (ui *UI) Start(addr string) error {
-	defer ui.g.Close()
+	defer func() {
+		ui.g.Close()
+		if ui.errMessage != "" {
+			fmt.Println(ui.errMessage)
+		}
+	}()
 
 	ui.g.SetManagerFunc(ui.usernameLayout)
 	if err := ui.setUsernameKeybindings(); err != nil {
@@ -375,23 +381,9 @@ func (ui *UI) showHelp() {
 }
 
 func (ui *UI) handleUsernameError(message string) {
+	ui.errMessage = message
 	ui.g.Update(func(g *gocui.Gui) error {
-		prompt, err := g.View("prompt")
-		if err != nil {
-			return nil
-		}
-		prompt.Clear()
-		fmt.Fprintln(prompt, "Enter your username:")
-		fmt.Fprintln(prompt, message)
-		fmt.Fprintln(prompt, "Restart client to try again.")
-
-		input, err := g.View("username")
-		if err == nil {
-			input.Clear()
-			input.SetCursor(0, 0)
-			input.SetOrigin(0, 0)
-		}
-		return nil
+		return gocui.ErrQuit
 	})
 }
 

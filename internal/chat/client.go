@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -59,13 +60,13 @@ func NewClient(conn net.Conn, reader *bufio.Reader) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	wg.Add(2)
-	go session.clientReader(ctx, &wg)
+	go session.clientReader(ctx, cancel, &wg)
 	go session.clientWriter(ctx, cancel, &wg)
 	wg.Wait() // blocks until both goroutines finish
 }
 
 // clientReader continuously reads from the server and prints to stdout
-func (s *ClientSession) clientReader(ctx context.Context, wg *sync.WaitGroup) {
+func (s *ClientSession) clientReader(ctx context.Context, cancel context.CancelFunc, wg *sync.WaitGroup) {
 	defer wg.Done()
 	reader := bufio.NewReader(s.Conn) // network reader
 	for {
@@ -78,8 +79,10 @@ func (s *ClientSession) clientReader(ctx context.Context, wg *sync.WaitGroup) {
 		// line := scanner.Text()
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			log.Printf("Read error: %v\n", err)
-			return
+			if err.Error() != "EOF" {
+				log.Printf("Read error: %v\n", err)
+			}
+			os.Exit(0)
 		}
 		fmt.Println(line)
 		// Keep last 64 messages in history (thread-safe)
