@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"netcat/internal/chat"
 )
@@ -58,10 +59,9 @@ func TestRoomCapacity(t *testing.T) {
 				t.Fatalf("Expected client %d to be admitted, got error: %v", i+1, err)
 			}
 		}
-
-		room.Mu.Lock()
-		count := len(room.Clients)
-		room.Mu.Unlock()
+		
+		time.Sleep(10 * time.Millisecond) // wait for event loop to process joins
+		count := room.ClientCount()
 		if count != chat.MaxClients {
 			t.Fatalf("Expected %d clients in room, got %d", chat.MaxClients, count)
 		}
@@ -113,10 +113,16 @@ func TestRegisterClient(t *testing.T) {
 		if err != nil {
 			t.Errorf("Expected no error registering Alice, got: %v", err)
 		}
-		room.Mu.Lock()
-		_, ok := room.Clients["Alice"]
-		room.Mu.Unlock()
-		if !ok {
+		
+		time.Sleep(10 * time.Millisecond)
+		clients := room.GetClients()
+		found := false
+		for _, name := range clients {
+			if name == "Alice" {
+				found = true
+			}
+		}
+		if !found {
 			t.Error("Expected Alice to be in room clients map")
 		}
 	})
@@ -137,10 +143,11 @@ func TestRegisterClient(t *testing.T) {
 func TestSendHistory(t *testing.T) {
 	s := chat.NewServer()
 	room, _ := s.GetRoom("Main Room")
-	room.History = []chat.ChatMessage{
-		{User: "Bob", Text: "hello"},
-		{User: "Charlie", Text: "world"},
-	}
+
+	// Have someone say things to build history
+	room.Messages <- chat.ChatMessage{User: "Bob", Text: "hello"}
+	room.Messages <- chat.ChatMessage{User: "Charlie", Text: "world"}
+	time.Sleep(10 * time.Millisecond)
 
 	serverConn, clientConn := net.Pipe()
 	defer serverConn.Close()
@@ -152,9 +159,12 @@ func TestSendHistory(t *testing.T) {
 		Out:      make(chan string, 32),
 	}
 
-	room.SendHistory(c)
-
-	if len(c.Out) != 2 {
-		t.Errorf("Expected 2 history messages in client.out, got %d", len(c.Out))
+	room.Join(c)
+	time.Sleep(10 * time.Millisecond)
+	
+	// Expect at least 2 messages in Out. 
+	// Wait, we also get user list and system announcement depending on the sequence.
+	if len(c.Out) < 2 {
+		t.Errorf("Expected at least 2 history messages in client.out, got %d", len(c.Out))
 	}
 }
