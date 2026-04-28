@@ -295,9 +295,3 @@ This refactor gives you:
 ✅ Easier testing
 
 > You didn't just fix bugs — you aligned your entire system around a single, coherent concurrency model.
-
-If you want next, I can:
-
-*   simplify redraws into a batched render pass
-*   introduce cancellable context shutdown
-*   align UI + server events into a shared protocol model
