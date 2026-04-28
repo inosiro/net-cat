@@ -184,15 +184,14 @@ func (c *Client) Reader(room *Room, s *Server) {
 
 			// Update client's username
 			oldName := c.Username
-			c.mu.Lock()
-			currRoom := c.currentRoom
-			c.mu.Unlock()
-
-			s.Mu.Lock()
 			delete(s.Users, oldName)
 			c.Username = newName
 			s.Users[newName] = c
 			s.Mu.Unlock()
+
+			c.mu.Lock()
+			currRoom := c.currentRoom
+			c.mu.Unlock()
 			currRoom.ChangeNick(c, oldName, newName)
 
 			select {

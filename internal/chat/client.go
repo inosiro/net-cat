@@ -84,6 +84,12 @@ func (s *ClientSession) clientReader(ctx context.Context, cancel context.CancelF
 			}
 			os.Exit(0)
 		}
+
+		trimmedLine := strings.TrimSpace(line)
+		if trimmedLine == "[USER_LIST_START]" || trimmedLine == "[USER_LIST_END]" || trimmedLine == "[ROOM_LIST_START]" || trimmedLine == "[ROOM_LIST_END]" {
+			continue
+		}
+
 		fmt.Println(line)
 		// Keep last 64 messages in history (thread-safe)
 		s.HistoryMu.Lock()
