@@ -226,21 +226,24 @@ func (ui *UI) Run() error {
 	for ev := range ui.events {
 		switch ev.Type {
 
-			case UIEventChatMessage:
-				ui.handleChatMessage(ev.Text)
+		case UIEventChatMessage:
+			ui.handleChatMessage(ev.Text)
 
-			case UIEventRoomsUpdate:
-				ui.handleRoomsUpdate(ev.Items)
+		case UIEventRoomsUpdate:
+			ui.handleRoomsUpdate(ev.Items)
 
-			case UIEventUsersUpdate:
-				ui.handleUsersUpdate(ev.Items)
+		case UIEventUsersUpdate:
+			ui.handleUsersUpdate(ev.Items)
 
-			case UIEventUsernameError:
-				ui.handleUsernameError(ev.Text)
+		case UIEventUsernameError:
+			ui.handleUsernameError(ev.Text)
 
-			case UIEventQuit:
+		case UIEventQuit:
+			ui.g.Update(func(g *gocui.Gui) error {
 				return gocui.ErrQuit
-			}
+			})
+			// return gocui.ErrQuit
+		}
 	}
 	return nil
 }
