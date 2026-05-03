@@ -75,7 +75,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 		if strings.HasPrefix(text, "/dm ") {
 			parts := strings.SplitN(text[4:], " ", 2)
 			if len(parts) < 2 || strings.TrimSpace(parts[1]) == "" {
-				c.Out <- "Usage: /dm <username> <message>"
+				c.Send("Usage: /dm <username> <message>")
 				continue
 			}
 			targetUsername := strings.TrimSpace(parts[0])
@@ -86,16 +86,16 @@ func (c *Client) Reader(room *Room, s *Server) {
 			s.Mu.Unlock()
 
 			if targetClient == nil {
-				c.Out <- "This username doesnt exists"
+				c.Send("This username doesnt exists")
 				continue
 			}
 
 			// Send DM to target user
 			dmMessage := fmt.Sprintf("[DM From %q][%s]: %s", c.Username, time.Now().Format("2006-01-02 15:04:05"), message)
-			targetClient.Out <- dmMessage
+			targetClient.Send(dmMessage)
 
 			// Send confirmation to sender
-			c.Out <- fmt.Sprintf("DM sent to %s", targetUsername)
+			c.Send(fmt.Sprintf("DM sent to %s", targetUsername))
 			continue
 		}
 
@@ -109,7 +109,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 				lines = append(lines, fmt.Sprintf("%s (%d users)", roomName, room.ClientCount()))
 			}
 			lines = append(lines, "[ROOM_LIST_END]")
-			c.Out <- strings.Join(lines, "\n")
+			c.Send(strings.Join(lines, "\n"))
 			continue
 		}
 
@@ -124,7 +124,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 			lines = append(lines, "[USER_LIST_START]")
 			lines = append(lines, clients...)
 			lines = append(lines, "[USER_LIST_END]")
-			c.Out <- strings.Join(lines, "\n")
+			c.Send(strings.Join(lines, "\n"))
 			continue
 		}
 
@@ -132,7 +132,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 		if strings.HasPrefix(text, "/switch ") {
 			newRoomName := strings.TrimSpace(text[8:])
 			if newRoomName == "" {
-				c.Out <- "Usage: /switch <roomname>"
+				c.Send("Usage: /switch <roomname>")
 				continue
 			}
 
@@ -141,7 +141,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 				// Room doesn't exist, create it
 				newRoom, err = s.CreateRoom(newRoomName)
 				if err != nil {
-					c.Out <- fmt.Sprintf("Failed to create room: %s", err.Error())
+					c.Send(fmt.Sprintf("Failed to create room: %s", err.Error()))
 					continue
 				}
 				// Start broadcaster for new room
@@ -153,7 +153,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 			c.mu.Unlock()
 
 			if err := s.MoveClientToRoom(c, oldRoom, newRoom); err != nil {
-				c.Out <- err.Error()
+				c.Send(err.Error())
 				continue
 			}
 
@@ -163,7 +163,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 			c.mu.Unlock()
 			log.Printf("%s switched room from %s to %s\n", c.Username, oldRoom.Name, newRoom.Name)
 
-			c.Out <- fmt.Sprintf("Switched to room: %s", newRoom.Name)
+			c.Send(fmt.Sprintf("Switched to room: %s", newRoom.Name))
 			continue
 		}
 
@@ -171,14 +171,14 @@ func (c *Client) Reader(room *Room, s *Server) {
 		if strings.HasPrefix(text, "/nick ") {
 			newName := strings.TrimSpace(text[6:])
 			if newName == "" || !ValidateUsername(newName) {
-				c.Out <- "Invalid username"
+				c.Send("Invalid username")
 				continue
 			}
 
 			s.Mu.Lock()
 			if _, exists := s.Users[newName]; exists && newName != c.Username {
 				s.Mu.Unlock()
-				c.Out <- "Username already taken in this room"
+				c.Send("Username already taken in this room")
 				continue
 			}
 
@@ -212,17 +212,17 @@ func (c *Client) Reader(room *Room, s *Server) {
 		if text == "/stats" {
 			totalRooms := s.GetRoomCount()
 			totalUsers := s.GetTotalUserCount()
-			c.Out <- fmt.Sprintf("Server Stats: %d rooms, %d total users", totalRooms, totalUsers)
+			c.Send(fmt.Sprintf("Server Stats: %d rooms, %d total users", totalRooms, totalUsers))
 			continue
 		}
 
 		if len(text) > MaxMessageSize {
-			c.Out <- "Message too long. Maximum 128 characters allowed."
+			c.Send("Message too long. Maximum 128 characters allowed.")
 			continue
 		}
 
 		if !utf8.ValidString(text) {
-			c.Out <- "Invalid UTF-8 characters in message."
+			c.Send("Invalid UTF-8 characters in message.")
 			continue
 		}
 
@@ -237,7 +237,7 @@ func (c *Client) Reader(room *Room, s *Server) {
 				return
 			}
 			c.mu.Unlock()
-			c.Out <- "Please wait 1 second between messages."
+			c.Send("Please wait 1 second between messages.")
 			continue
 		}
 		c.lastMessageAt = time.Now()

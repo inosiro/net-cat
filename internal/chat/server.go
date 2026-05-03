@@ -25,6 +25,19 @@ type Client struct {
 	spamCount     int
 }
 
+// safely sends a message to the client's output channel.
+func (c *Client) Send(msg string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return
+	}
+	select {
+	case c.Out <- msg:
+	default:
+	}
+}
+
 func (c *Client) SafeClose() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -89,10 +102,7 @@ func (s *Server) ServerBroadcaster() {
 
 			s.Mu.Lock()
 			for _, c := range s.Users {
-				select {
-				case c.Out <- msg:
-				default:
-				}
+				c.Send(msg)
 			}
 			s.Mu.Unlock()
 		}
@@ -215,7 +225,7 @@ func (s *Server) MoveClientToRoom(c *Client, oldRoom, newRoom *Room) error {
 func (s *Server) FinalizeClientDisconnect(c *Client) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
-	
+
 	if _, exists := s.Users[c.Username]; exists {
 		log.Printf("Client %s disconnected from server\n", c.Username)
 		delete(s.Users, c.Username)

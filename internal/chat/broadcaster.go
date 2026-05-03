@@ -2,9 +2,9 @@ package chat
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
-	"slices"
 )
 
 func (r *Room) RoomBroadcaster(s *Server) {
@@ -62,28 +62,47 @@ func (r *Room) handleMessage(s *Server, msg ChatMessage) {
 	}
 
 	for _, c := range r.clients {
+		if c == nil {
+			continue
+		}
+		c.mu.Lock()
+		if c.closed {
+			c.mu.Unlock()
+			continue
+		}
 		select {
 		case c.Out <- formatted:
 		default:
-			r.events <- roomEvent{
-				typ:    roomDisconnect,
-				client: c,
+			select {
+			case r.events <- roomEvent{typ: roomDisconnect, client: c}:
+			default:
 			}
 		}
+		c.mu.Unlock()
 	}
 }
 
 func (r *Room) handleJoin(s *Server, c *Client) {
 	r.clients[c.Username] = c
 
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return
+	}
 	for _, msg := range r.history {
 		select {
 		case c.Out <- msg.FormatMessage():
 		default:
-			r.events <- roomEvent{typ: roomDisconnect, client: c}
+			select {
+			case r.events <- roomEvent{typ: roomDisconnect, client: c}:
+			default:
+			}
+			c.mu.Unlock()
 			return
 		}
 	}
+	c.mu.Unlock()
 
 	s.AnnounceJoin(r, c.Username)
 	r.broadcastUsersList()
@@ -142,27 +161,34 @@ func (r *Room) broadcastUsersList() {
 	msg := strings.Join(lines, "\n")
 
 	for _, c := range r.clients {
-		select {
-		case c.Out <- msg:
-		default:
+		if c != nil {
+			c.Send(msg)
 		}
 	}
 }
 
 // AnnounceJoin sends a join system message through the broadcaster.
 func (s *Server) AnnounceJoin(room *Room, username string) {
-	room.Messages <- ChatMessage{
+	msg := ChatMessage{
 		Timestamp: time.Now(),
 		User:      SystemUser,
 		Text:      fmt.Sprintf("%s has joined %s...", username, room.Name),
+	}
+	select {
+	case room.Messages <- msg:
+	default:
 	}
 }
 
 // AnnounceLeave sends a leave system message through the broadcaster.
 func (s *Server) AnnounceLeave(room *Room, username string) {
-	room.Messages <- ChatMessage{
+	msg := ChatMessage{
 		Timestamp: time.Now(),
 		User:      SystemUser,
 		Text:      fmt.Sprintf("%s has left %s...", username, room.Name),
+	}
+	select {
+	case room.Messages <- msg:
+	default:
 	}
 }
