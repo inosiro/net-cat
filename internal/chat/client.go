@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -82,7 +81,7 @@ func (s *ClientSession) clientReader(ctx context.Context, cancel context.CancelF
 			if err.Error() != "EOF" {
 				log.Printf("Read error: %v\n", err)
 			}
-			os.Exit(0)
+			cancel()
 		}
 
 		trimmedLine := strings.TrimSpace(line)
@@ -90,7 +89,7 @@ func (s *ClientSession) clientReader(ctx context.Context, cancel context.CancelF
 			continue
 		}
 
-		fmt.Println(line)
+		fmt.Print(line)
 		// Keep last 64 messages in history (thread-safe)
 		s.HistoryMu.Lock()
 		s.History = append(s.History, line)
@@ -171,7 +170,7 @@ func (s *ClientSession) handleCommand(cmd string) {
 		}
 		fmt.Printf("=== Chat History (last %d messages) ===\n", MaxRoomHistory)
 		for _, msg := range s.History {
-			fmt.Println(msg)
+			fmt.Print(msg)
 		}
 		s.HistoryMu.Unlock()
 		fmt.Println("=== End History ===")
