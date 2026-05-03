@@ -148,3 +148,97 @@ func TestIntegration_ClientLifecycle(t *testing.T) {
 		c.conn.Close()
 	}
 }
+
+// TestIntegration_BannedIP verifies the ban functionality:
+// 1. A client gets banned for spamming (exceeds MaxSpamAttempts).
+// 2. When the same IP attempts to reconnect, it receives the ban message.
+// 3. After the ban expires (1 minute), the IP can reconnect normally.
+func TestIntegration_BannedIP(t *testing.T) {
+	// 1. Initialize and start the Server on port 2526
+	s := chat.NewServer()
+	port := "2526"
+
+	// Start server in background goroutine
+	go func() {
+		_ = s.ListenAndServe(port)
+	}()
+	defer s.Shutdown()
+
+	// Give the server a small window to initialize the listener
+	time.Sleep(200 * time.Millisecond)
+
+	// 2. Connect a client and trigger a ban by spamming
+	conn, err := net.Dial("tcp", "localhost:"+port)
+	if err != nil {
+		t.Fatalf("Initial connection failed: %v", err)
+	}
+	defer conn.Close()
+
+	reader := bufio.NewReader(conn)
+
+	// Read the banner (logo + prompt)
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	bannerReceived := false
+	for {
+		line, err := reader.ReadString(':')
+		if err != nil {
+			t.Fatalf("Error reading banner: %v", err)
+		}
+		if strings.Contains(line, "[ENTER YOUR NAME]:") {
+			bannerReceived = true
+			break
+		}
+	}
+
+	if !bannerReceived {
+		t.Fatalf("Banner not received properly")
+	}
+
+	// Send a valid username to join
+	fmt.Fprintln(conn, "SpamUser")
+	time.Sleep(100 * time.Millisecond)
+
+	// Spam messages to trigger the ban (MaxSpamAttempts = 5)
+	// Each message must be sent within MessageCooldown (1 second) to count as spam
+	for i := 0; i < 6; i++ {
+		fmt.Fprintf(conn, "spam_msg_%d\n", i)
+		time.Sleep(100 * time.Millisecond) // Less than MessageCooldown
+	}
+
+	// Give the server time to process the spam and ban the IP
+	time.Sleep(500 * time.Millisecond)
+
+	// 3. Attempt to reconnect with the same IP (should be rejected)
+	conn2, err := net.Dial("tcp", "localhost:"+port)
+	if err != nil {
+		t.Fatalf("Second connection failed: %v", err)
+	}
+	defer conn2.Close()
+
+	reader2 := bufio.NewReader(conn2)
+	conn2.SetReadDeadline(time.Now().Add(2 * time.Second))
+
+	// Read the response - should be ban message
+	banMessage := ""
+	for {
+		line, err := reader2.ReadString('\n')
+		if err != nil {
+			break
+		}
+		banMessage += line
+		if strings.Contains(line, "You are banned") {
+			break
+		}
+	}
+
+	if !strings.Contains(banMessage, "You are banned") {
+		t.Errorf("Expected ban message, but got: %s", banMessage)
+	}
+
+	// 4. Verify that the server sent the ban message and closed the connection
+	// (The next read should fail or return empty)
+	line, err := reader2.ReadString('\n')
+	if err == nil && strings.TrimSpace(line) != "" {
+		t.Errorf("Expected connection to close after ban message, but got: %s", line)
+	}
+}

@@ -29,6 +29,10 @@ func ReadStartupBanner(conn net.Conn) (string, error) {
 			if strings.Contains(b.String(), namePrompt) {
 				return b.String(), nil
 			}
+			// Check if we received a ban message
+			if strings.Contains(b.String(), "You are banned") {
+				return b.String(), nil
+			}
 		}
 		if err != nil {
 			return b.String(), err

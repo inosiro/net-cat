@@ -96,6 +96,13 @@ func main() {
 				log.Fatalf("Failed to read banner: %v\n", err)
 			}
 			fmt.Print(banner)
+
+			// Check if the banner contains a ban message
+			if strings.Contains(banner, "You are banned") {
+				// Connection was rejected due to ban, exit gracefully
+				return
+			}
+
 			if !strings.Contains(banner, namePrompt) {
 				// Fallback safety: always show prompt before reading username input.
 				fmt.Print(namePrompt)

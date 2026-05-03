@@ -30,7 +30,13 @@ func NewUIClient(addr string, ui *UI) (*UIClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	_ = string(buf[:n])
+
+	bannerMsg := string(buf[:n])
+
+	// Check if the connection was rejected due to ban
+	if strings.Contains(bannerMsg, "You are banned") {
+		return nil, fmt.Errorf("connection rejected: %s", strings.TrimSpace(bannerMsg))
+	}
 
 	go client.reader()
 
