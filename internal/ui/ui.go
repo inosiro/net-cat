@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"netcat/internal/chat"
+
 	"github.com/jroimartin/gocui"
 )
 
@@ -366,16 +368,9 @@ func (ui *UI) showHelp() {
 		if err != nil {
 			return nil
 		}
-		fmt.Fprintln(v, "=== Available Commands ===")
-		fmt.Fprintln(v, "/nick <name>   - Change your nickname")
-		fmt.Fprintln(v, "/switch <room> - Switch to a different room")
-		fmt.Fprintln(v, "/history       - Show last 64 messages")
-		fmt.Fprintln(v, "/stats         - Show server statistics")
-		fmt.Fprintln(v, "/rooms         - List rooms")
-		fmt.Fprintln(v, "/users         - List users in room")
-		fmt.Fprintln(v, "/leave         - Leave chat and disconnect")
-		fmt.Fprintln(v, "/help          - Show this help message")
-		fmt.Fprintln(v, "=== End Help ===")
+		for _, line := range chat.GetHelpCommands() {
+			fmt.Fprintln(v, line)
+		}
 		return nil
 	})
 }

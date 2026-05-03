@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"unicode"
@@ -37,5 +38,22 @@ func ReadStartupBanner(conn net.Conn) (string, error) {
 		if err != nil {
 			return b.String(), err
 		}
+	}
+}
+
+// GetHelpCommands returns the list of available commands for display in help menus
+func GetHelpCommands() []string {
+	return []string{
+		"=== Available Commands ===",
+		"/nick <name>   - Change your nickname",
+		"/switch <room> - Switch to a different room",
+		fmt.Sprintf("/history       - Show last %d messages", MaxRoomHistory),
+		"/stats         - Show server statistics",
+		"/rooms         - List rooms",
+		"/users         - List users in room",
+		"/dm <user> <message> - Send a direct message to a user",
+		"/leave         - Leave chat and disconnect",
+		"/help          - Show this help message",
+		"=== End Help ===",
 	}
 }

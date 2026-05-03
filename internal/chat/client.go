@@ -184,16 +184,9 @@ func (s *ClientSession) handleCommand(cmd string) {
 		fmt.Println("(Sending to server...)")
 
 	case "/help":
-		fmt.Println("=== Available Commands ===")
-		fmt.Println("/nick <name>   - Change your nickname")
-		fmt.Println("/switch <room> - Switch to a different room")
-		fmt.Printf("/history       - Show last %d messages\n", MaxRoomHistory)
-		fmt.Println("/stats         - Show server statistics")
-		fmt.Println("/rooms         - List rooms")
-		fmt.Println("/users         - List users in room")
-		fmt.Println("/leave         - Leave chat and disconnect")
-		fmt.Println("/help          - Show this help message")
-		fmt.Println("=== End Help ===")
+		for _, line := range GetHelpCommands() {
+			fmt.Println(line)
+		}
 
 	default:
 		fmt.Printf("Unknown command: %s (try /help)\n", command)
