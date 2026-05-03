@@ -12,6 +12,7 @@ type UIClient struct {
 	username         string
 	ui               *UI
 	awaitingRoomJoin bool
+	br               *bufio.Reader
 }
 
 func NewUIClient(addr string, ui *UI) (*UIClient, error) {
@@ -23,19 +24,24 @@ func NewUIClient(addr string, ui *UI) (*UIClient, error) {
 	client := &UIClient{
 		conn: conn,
 		ui:   ui,
+		br:   bufio.NewReader(conn),
 	}
 
-	buf := make([]byte, 4096)
-	n, err := conn.Read(buf)
-	if err != nil {
-		return nil, err
-	}
-
-	bannerMsg := string(buf[:n])
-
-	// Check if the connection was rejected due to ban
-	if strings.Contains(bannerMsg, "You are banned") {
-		return nil, fmt.Errorf("connection rejected: %s", strings.TrimSpace(bannerMsg))
+	// Consume initial banner until name prompt [ENTER YOUR NAME]:
+	var handshake strings.Builder
+	for {
+		b, err := client.br.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+		handshake.WriteByte(b)
+		s := handshake.String()
+		if strings.HasSuffix(s, "[ENTER YOUR NAME]:") {
+			break
+		}
+		if strings.Contains(s, "You are banned") {
+			return nil, fmt.Errorf("connection rejected: %s", strings.TrimSpace(s))
+		}
 	}
 
 	go client.reader()
@@ -57,14 +63,24 @@ func (c *UIClient) SendMessage(msg string) {
 }
 
 func (c *UIClient) reader() {
-	scanner := bufio.NewScanner(c.conn)
 	rooms := []string{}
 	users := []string{}
 	collectingRooms := false
 	collectingUsers := false
 
-	for scanner.Scan() {
-		line := scanner.Text()
+	for {
+		line, err := c.br.ReadString('\n')
+		if err != nil {
+			if err.Error() != "EOF" {
+				c.ui.PostChatMessage(fmt.Sprintf("Connection error: %v", err))
+			}
+			break
+		}
+		line = strings.TrimRight(line, "\r\n")
+
+		if line == "" || strings.Contains(line, "[ENTER YOUR NAME]:") {
+			continue
+		}
 
 		if line == "[ROOM_LIST_START]" {
 			collectingRooms = true
@@ -133,9 +149,5 @@ func (c *UIClient) reader() {
 		}
 
 		c.ui.PostChatMessage(line)
-	}
-
-	if err := scanner.Err(); err != nil {
-		c.ui.PostChatMessage(fmt.Sprintf("Connection error: %v", err))
 	}
 }

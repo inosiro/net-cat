@@ -9,6 +9,7 @@ func TestUIPostEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewUI failed: %v", err)
 	}
+	defer u.g.Close()
 
 	u.PostChatMessage("hello")
 	ev := <-u.events
@@ -46,6 +47,7 @@ func TestUISetRooms(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewUI failed: %v", err)
 	}
+	defer u.g.Close()
 
 	u.SetRooms([]string{"r1", "r2"})
 	if len(u.rooms) != 2 || u.rooms[0] != "r1" || u.rooms[1] != "r2" {

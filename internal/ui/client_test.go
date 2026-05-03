@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bufio"
 	"net"
 	"testing"
 	"time"
@@ -16,7 +17,7 @@ func TestNewUIClient(t *testing.T) {
 	go func() {
 		conn, err := l.Accept()
 		if err == nil {
-			conn.Write([]byte("Welcome Banner\n"))
+			conn.Write([]byte("Welcome Banner\n[ENTER YOUR NAME]:"))
 			conn.Close()
 		}
 	}()
@@ -25,6 +26,7 @@ func TestNewUIClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer u.g.Close()
 
 	c, err := NewUIClient(l.Addr().String(), u)
 	if err != nil {
@@ -44,6 +46,7 @@ func TestUIClient_SendMethods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer u.g.Close()
 
 	client := &UIClient{
 		conn: clientConn,
@@ -99,10 +102,12 @@ func TestUIClient_Reader(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer u.g.Close()
 
 	client := &UIClient{
 		conn: clientConn,
 		ui:   u,
+		br:   bufio.NewReader(clientConn),
 	}
 
 	go client.reader()
@@ -160,10 +165,12 @@ func TestUIClient_Reader_AwaitingRoomJoin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer u.g.Close()
 
 	client := &UIClient{
 		conn:             clientConn,
 		ui:               u,
+		br:               bufio.NewReader(clientConn),
 		awaitingRoomJoin: true,
 		username:         "myuser",
 	}
