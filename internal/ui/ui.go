@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"unicode/utf8"
 
@@ -103,21 +104,22 @@ func (ui *UI) usernameLayout(g *gocui.Gui) error {
 
 func (ui *UI) chatLayout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
-	if v, err := g.SetView("rooms", 0, 0, 20, maxY/2-1); err != nil {
+	leftColumn := int(math.Max(math.Floor(0.2*float64(maxX)), 25))
+	if v, err := g.SetView("rooms", 0, 0, leftColumn, maxY/2-1); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Title = "Rooms"
 		ui.updateRoomsView()
 	}
-	if v, err := g.SetView("users", 0, maxY/2, 20, maxY-1); err != nil {
+	if v, err := g.SetView("users", 0, maxY/2, leftColumn, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
 		v.Title = "Users"
 		ui.updateUsersView()
 	}
-	if v, err := g.SetView("chat", 21, 0, maxX-1, maxY-4); err != nil {
+	if v, err := g.SetView("chat", leftColumn+1, 0, maxX-1, maxY-4); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -128,7 +130,7 @@ func (ui *UI) chatLayout(g *gocui.Gui) error {
 			fmt.Fprintln(v, msg)
 		}
 	}
-	if v, err := g.SetView("input", 21, maxY-3, maxX-1, maxY-1); err != nil {
+	if v, err := g.SetView("input", leftColumn+1, maxY-3, maxX-1, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -217,16 +219,42 @@ func (ui *UI) sendMessage(g *gocui.Gui, v *gocui.View) error {
 }
 
 func (ui *UI) scrollUp(g *gocui.Gui, v *gocui.View) error {
-	ox, oy := v.Origin()
+	cv, err := g.View("chat")
+	if err != nil {
+		return nil
+	}
+
+	cv.Autoscroll = false
+	ox, oy := cv.Origin()
 	if oy > 0 {
-		v.SetOrigin(ox, oy-1)
+		cv.SetOrigin(ox, oy-1)
 	}
 	return nil
 }
 
 func (ui *UI) scrollDown(g *gocui.Gui, v *gocui.View) error {
-	ox, oy := v.Origin()
-	v.SetOrigin(ox, oy+1)
+	cv, err := g.View("chat")
+	if err != nil {
+		return nil
+	}
+
+	if cv.Autoscroll {
+		return nil
+	}
+
+	ox, oy := cv.Origin()
+
+	_, h := cv.Size()
+	lines := cv.BufferLines()
+	lineCount := len(lines)
+	if lineCount > 0 && lines[lineCount-1] == "" {
+		lineCount--
+	}
+	if oy+h >= lineCount {
+		cv.Autoscroll = true
+	} else {
+		cv.SetOrigin(ox, oy+1)
+	}
 	return nil
 }
 
