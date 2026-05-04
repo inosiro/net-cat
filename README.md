@@ -202,4 +202,4 @@ $ nc localhost 2525
 
 ## License
 
-This project was completed as part of the [Zone01](https://zone01.org) curriculum.
+This project was completed as part of the [Zone01](https://zone01.gr) curriculum.
