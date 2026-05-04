@@ -75,6 +75,13 @@ The project directives allow only `github.com/jroimartin/gocui` as an external d
 Neither package is imported anywhere in our own source files (hence the `// indirect` comment), but omitting them from `go.mod` causes a build failure. They are there solely because Go modules mandates that the full dependency graph be recorded.
 
 ---
+| `/rooms` | List all available rooms |
+| `/users` | List users in the current room |
+| `/dm <user> <message>` | Send a direct message |
+| `/history` | Show the last 64 messages in the current room |
+| `/stats` | Show server statistics |
+| `/leave` | Disconnect from the server |
+| `/help` | Show the help message |
 
 ## Usage
 
@@ -182,7 +189,20 @@ $ nc localhost 2525
 Welcome to TCP-Chat!
          _nnnn_
         dGGGGMMb
-       ...
+       @p~qp~~qMb
+       M|@||@) M|
+       @,----.JM|
+      JS^\__/  qKL
+     dZP        qKRb
+    dZP          qKKb
+   fZP            SMMb
+   HZM            MMMM
+   FqM            MMMM
+ __| ".        |\dS"qML
+ |    `.       | `' \Zq
+_)      \.___.,|     .'
+\____   )MMMMMP|   .'
+     `-'       `--'
 [ENTER YOUR NAME]: Alice
 [2026-05-04 16:00:05][Alice]:Hello!
 Bob has joined our chat...
@@ -202,4 +222,4 @@ $ nc localhost 2525
 
 ## License
 
-This project was completed as part of the [Zone01](https://zone01.gr) curriculum.
+This project was completed as part of the [Zone01](https://zone01.org) curriculum.
