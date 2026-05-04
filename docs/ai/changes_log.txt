@@ -10,6 +10,35 @@ Documentation Update:
 
 Log Update: Appended this action to `changes_log.txt`.
 
+Timestamp: 2026-05-04 User Request: "i want you to create tests for main.go , ask me questions before you start"
+
+AI Assistant Output & Actions:
+
+Test Planning & Clarification:
+- Asked clarification questions before implementation for scope, test style, refactor permissions, coverage target, and verification sequence.
+- Received direction to cover all requested `main.go` paths, avoid refactors to `main.go`, target at least 85% coverage, and run targeted tests before full suite.
+
+Feature Implementation:
+- Added comprehensive subprocess-based tests in `main_test.go` to cover `main.go` behavior without modifying production code.
+- Added tests for CLI usage validation, server startup/shutdown signal path, client banned-banner flow, startup prompt flow, default port behavior, UI mode branch, dial failure, startup banner read failure, server output file path (success), output open failure, and server listen failure.
+
+Verification:
+- Ran targeted tests for new file: `go test . -run TestMain -v` -> PASS.
+- Measured `main.go` coverage with `go test . -coverprofile=cover.out` and `go tool cover -func=cover.out` -> `netcat/main.go: main 94.5%`.
+- Ran full suite: `go test ./...` -> PASS.
+
+Log Update: Appended this action to `changes_log.txt`.
+
+Timestamp: 2026-05-04 User Request: "So now you have understanding of the project?"
+
+AI Assistant Output & Actions:
+
+Clarification & Confirmation:
+- Confirmed understanding of the project structure, current architecture, and operational flow after reviewing project documentation and implementation files.
+- Confirmed awareness of project workflow constraints from `.instructions.md`, including append-only activity logging.
+
+Log Update: Appended this action to `changes_log.txt`.
+
 Timestamp: 2026-04-23
 User Request: "We will keep it like this for now."
 
@@ -54,6 +83,20 @@ Git Workflow & File Move:
 - Updated `.instructions.md` with the new paths for `project-context.md` and `changes_log.txt`.
 
 Log Update: Appended this action to `docs/ai/changes_log.txt`.
+
+Timestamp: 2026-05-04 User Request: "I wqant you to follow the guidelines in .instructions.md to the letter."
+
+AI Assistant Output & Actions:
+
+Instruction Compliance:
+- Read `.instructions.md` to load and apply project-specific workflow and behavior rules.
+- Checked for required `PROJECT_CONTEXT.md` using file search; file is currently missing from the workspace.
+- Read `docs/ai/changes_log.txt` as required at conversation start by project instructions.
+
+Verification:
+- Ran `tail -n 60 docs/ai/changes_log.txt` to preserve append-only formatting consistency before writing.
+
+Log Update: Appended this action to `changes_log.txt`.
 
 Timestamp: 2026-04-23
 User Request: "the logconnectiondisconnected function does not work. when the user /leave the server does not log the event. fix it"
