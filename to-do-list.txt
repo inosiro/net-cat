@@ -13,3 +13,4 @@
 11. close ui when user leaves   done 
 12. update rooms/users window when an event happen   done 
 13. test output filename log for server, add log for users connecting/disconnecting   done 
+14. Add main-test.go inside /tests folder.
