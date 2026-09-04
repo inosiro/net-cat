@@ -159,6 +159,10 @@ The UI provides dedicated panes for the chat, room list, and user list, with mou
 | Spam cooldown | 1 second between messages |
 | Max spam attempts before kick | 5 |
 
+##  License
+
+These projects were completed as part of the Zone01 Athens curriculum.
+
 ---
 
 ## Running Tests
